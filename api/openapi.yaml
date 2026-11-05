@@ -1,0 +1,424 @@
+openapi: 3.0.3
+info:
+    title: Go-Schedule API
+    version: 0.1.0
+    description: |
+        练习用日程服务 API。
+
+        统一响应约定：
+        - 所有接口的 HTTP 状态码固定为 `200`；
+        - 业务状态由响应 JSON 中的 `code` 字段表示：`200` 成功、`400` 参数错误、`404` 资源不存在、`500` 服务器内部错误；
+        - 响应体统一为 `{"code": xxx, "data": ...}`；
+        - 成功时 `data` 为业务数据，失败时 `data` 为 `{"message": "..."}`；
+        - 列表按规则排序：未完成在前、开始时间升序、开始时间相同时优先级降序。
+
+        日程使用统一的 `Schedule` 结构，由 `type` 决定哪些字段生效：
+        - `one_time`：只使用 `happen_time`，过期后自动视为已完成；
+        - `time_range`：只使用 `start_at` / `end_at`，两个时间都允许为 `null`；
+        - `recurring`：只使用 `recurrence`。
+        当前类型不使用的字段统一返回 `null`。
+
+servers:
+    - url: http://localhost:9276
+      description: 本地开发环境
+
+tags:
+    - name: schedules
+      description: 日程的增删改查
+
+paths:
+    /api/v1/schedules:
+        get:
+            tags: [schedules]
+            operationId: listSchedules
+            summary: 获取日程列表
+            responses:
+                "200":
+                    description: 成功时 `data` 为日程数组；失败时 `data` 为错误详情
+                    content:
+                        application/json:
+                            schema:
+                                oneOf:
+                                    - $ref: "#/components/schemas/ScheduleListResponse"
+                                    - $ref: "#/components/schemas/ErrorResponse"
+                            examples:
+                                success:
+                                    value:
+                                        code: 200
+                                        data:
+                                            - id: 1
+                                              title: 提交周报
+                                              type: one_time
+                                              priority: 2
+                                              done: false
+                                              created_at: "2026-11-02T08:30:00Z"
+                                              happen_time: "2026-11-02T18:00:00Z"
+                                              start_at: null
+                                              end_at: null
+                                              recurrence: null
+                                            - id: 2
+                                              title: 项目评审
+                                              type: time_range
+                                              priority: 1
+                                              done: false
+                                              created_at: "2026-11-02T08:35:00Z"
+                                              happen_time: null
+                                              start_at: "2026-11-03T09:00:00Z"
+                                              end_at: "2026-11-03T10:00:00Z"
+                                              recurrence: null
+                                            - id: 3
+                                              title: 站会
+                                              type: recurring
+                                              priority: 0
+                                              done: false
+                                              created_at: "2026-11-02T08:40:00Z"
+                                              happen_time: null
+                                              start_at: null
+                                              end_at: null
+                                              recurrence:
+                                                  frequency: weekly
+                                                  interval: 1
+                                                  start_at: "2026-11-04T01:00:00Z"
+                                                  days_of_week: [1, 3, 5]
+                                                  timezone: Asia/Shanghai
+                                internalError:
+                                    value:
+                                        code: 500
+                                        data:
+                                            message: 服务器内部错误
+
+        post:
+            tags: [schedules]
+            operationId: createSchedule
+            summary: 新增日程
+            requestBody:
+                required: true
+                content:
+                    application/json:
+                        schema:
+                            $ref: "#/components/schemas/CreateScheduleRequest"
+            responses:
+                "200":
+                    description: 成功时 `data` 为新日程；参数错误时 `code=400`
+                    content:
+                        application/json:
+                            schema:
+                                oneOf:
+                                    - $ref: "#/components/schemas/ScheduleResponse"
+                                    - $ref: "#/components/schemas/ErrorResponse"
+                            examples:
+                                success:
+                                    value:
+                                        code: 200
+                                        data:
+                                            id: 1
+                                            title: 提交周报
+                                            type: one_time
+                                            priority: 2
+                                            done: false
+                                            created_at: "2026-11-02T08:30:00Z"
+                                            happen_time: "2026-11-02T18:00:00Z"
+                                            start_at: null
+                                            end_at: null
+                                            recurrence: null
+                                invalidRequest:
+                                    value:
+                                        code: 400
+                                        data:
+                                            message: one_time 类型必须提供 happen_time
+
+    /api/v1/schedules/{id}:
+        put:
+            tags: [schedules]
+            operationId: updateSchedule
+            summary: 修改日程
+            description: 全量更新，`type` 决定哪些字段生效，未使用字段传 `null`。
+            parameters:
+                - $ref: "#/components/parameters/ScheduleId"
+            requestBody:
+                required: true
+                content:
+                    application/json:
+                        schema:
+                            $ref: "#/components/schemas/UpdateScheduleRequest"
+            responses:
+                "200":
+                    description: 成功时 `data` 为更新后的日程；参数错误或资源不存在时返回对应 `code`
+                    content:
+                        application/json:
+                            schema:
+                                oneOf:
+                                    - $ref: "#/components/schemas/ScheduleResponse"
+                                    - $ref: "#/components/schemas/ErrorResponse"
+                            examples:
+                                success:
+                                    value:
+                                        code: 200
+                                        data:
+                                            id: 2
+                                            title: 项目评审（改期）
+                                            type: time_range
+                                            priority: 3
+                                            done: true
+                                            created_at: "2026-11-02T08:35:00Z"
+                                            happen_time: null
+                                            start_at: "2026-11-03T14:00:00Z"
+                                            end_at: "2026-11-03T15:00:00Z"
+                                            recurrence: null
+                                notFound:
+                                    value:
+                                        code: 404
+                                        data:
+                                            message: 日程不存在
+
+        delete:
+            tags: [schedules]
+            operationId: deleteSchedule
+            summary: 删除日程
+            parameters:
+                - $ref: "#/components/parameters/ScheduleId"
+            responses:
+                "200":
+                    description: 成功时 `data` 为被删除日程的 ID
+                    content:
+                        application/json:
+                            schema:
+                                oneOf:
+                                    - $ref: "#/components/schemas/DeleteScheduleResponse"
+                                    - $ref: "#/components/schemas/ErrorResponse"
+                            examples:
+                                success:
+                                    value:
+                                        code: 200
+                                        data:
+                                            id: 1
+                                notFound:
+                                    value:
+                                        code: 404
+                                        data:
+                                            message: 日程不存在
+
+components:
+    parameters:
+        ScheduleId:
+            name: id
+            in: path
+            required: true
+            description: 日程 ID
+            schema:
+                type: integer
+                format: int64
+                minimum: 1
+
+    schemas:
+        Schedule:
+            type: object
+            required:
+                [
+                    id,
+                    title,
+                    type,
+                    priority,
+                    done,
+                    created_at,
+                    happen_time,
+                    start_at,
+                    end_at,
+                    recurrence,
+                ]
+            properties:
+                id: { type: integer, format: int64 }
+                title: { type: string, minLength: 1 }
+                type:
+                    type: string
+                    enum: [one_time, time_range, recurring]
+                    description: |
+                        日程类型：
+                        - `one_time`：只使用 `happen_time`
+                        - `time_range`：只使用 `start_at` / `end_at`
+                        - `recurring`：只使用 `recurrence`
+                priority: { type: integer, default: 0 }
+                done:
+                    type: boolean
+                    description: 是否已完成；`one_time` 类型由服务端根据 `happen_time` 自动计算
+                created_at: { type: string, format: date-time, readOnly: true }
+                happen_time:
+                    type: string
+                    format: date-time
+                    nullable: true
+                    description: 仅 `one_time` 使用；其他类型为 `null`
+                start_at:
+                    type: string
+                    format: date-time
+                    nullable: true
+                    description: 仅 `time_range` 使用，可为 `null`；其他类型为 `null`
+                end_at:
+                    type: string
+                    format: date-time
+                    nullable: true
+                    description: 仅 `time_range` 使用，可为 `null`；其他类型为 `null`
+                recurrence:
+                    nullable: true
+                    allOf:
+                        - $ref: "#/components/schemas/Recurrence"
+                    description: 仅 `recurring` 使用；其他类型为 `null`
+
+        Recurrence:
+            type: object
+            description: |
+                定期重复配置。每个发生点视为一次 `one_time` 事件。
+                `interval` 表示“每隔几个 frequency 单位”，不是固定天数。
+                `until` 与 `count` 二选一，都不提供表示无限重复。
+            required: [frequency, start_at]
+            properties:
+                frequency:
+                    type: string
+                    enum: [daily, weekly, monthly, yearly]
+                    description: 重复频率
+                interval:
+                    type: integer
+                    minimum: 1
+                    default: 1
+                    description: |
+                        重复间隔，单位由 `frequency` 决定：
+                        - `daily`：每 `interval` 天
+                        - `weekly`：每 `interval` 周；配置 `days_of_week` 时，在每个间隔周内这些星期几发生
+                        - `monthly`：每 `interval` 个月
+                        - `yearly`：每 `interval` 年
+                        默认值为 1，表示每个频率单位发生一次。
+                start_at:
+                    type: string
+                    format: date-time
+                    description: 第一次发生时间，同时决定后续发生的时间点
+                until:
+                    type: string
+                    format: date-time
+                    nullable: true
+                    description: 重复截止时间（包含）；与 `count` 二选一
+                count:
+                    type: integer
+                    minimum: 1
+                    nullable: true
+                    description: 最多发生次数；与 `until` 二选一
+                day_of_week:
+                    type: integer
+                    minimum: 0
+                    maximum: 6
+                    description: 星期几，0=周日、6=周六；仅 `frequency=weekly` 时使用，省略则取 `start_at` 的星期
+                day_of_month:
+                    type: integer
+                    minimum: 1
+                    maximum: 31
+                    description: 每月几号；仅 `frequency=monthly` 时使用
+                month:
+                    type: integer
+                    minimum: 1
+                    maximum: 12
+                    description: 每年几月；仅 `frequency=yearly` 时使用
+                timezone:
+                    type: string
+                    default: UTC
+                    description: 计算重复时间使用的时区
+
+        CreateScheduleRequest:
+            type: object
+            required: [title, type]
+            properties:
+                title: { type: string, minLength: 1 }
+                type:
+                    type: string
+                    enum: [one_time, time_range, recurring]
+                    description: 日程类型，决定需要提供哪些字段
+                priority: { type: integer, default: 0 }
+                happen_time:
+                    type: string
+                    format: date-time
+                    nullable: true
+                    description: 仅 `one_time` 使用，且该类型下必填；其他类型传 `null` 或省略
+                start_at:
+                    type: string
+                    format: date-time
+                    nullable: true
+                    description: 仅 `time_range` 使用，可为 `null`；其他类型传 `null` 或省略
+                end_at:
+                    type: string
+                    format: date-time
+                    nullable: true
+                    description: 仅 `time_range` 使用，可为 `null`；其他类型传 `null` 或省略
+                recurrence:
+                    nullable: true
+                    allOf:
+                        - $ref: "#/components/schemas/Recurrence"
+                    description: 仅 `recurring` 使用，且该类型下必填；其他类型传 `null` 或省略
+
+        UpdateScheduleRequest:
+            type: object
+            required: [title, type, priority]
+            properties:
+                title: { type: string, minLength: 1 }
+                type:
+                    type: string
+                    enum: [one_time, time_range, recurring]
+                    description: 日程类型，决定需要提供哪些字段
+                priority: { type: integer }
+                done:
+                    type: boolean
+                    description: 仅 `time_range` / `recurring` 使用；`one_time` 由服务端自动计算
+                happen_time:
+                    type: string
+                    format: date-time
+                    nullable: true
+                    description: 仅 `one_time` 使用，且该类型下必填；其他类型传 `null`
+                start_at:
+                    type: string
+                    format: date-time
+                    nullable: true
+                    description: 仅 `time_range` 使用，可为 `null`；其他类型传 `null`
+                end_at:
+                    type: string
+                    format: date-time
+                    nullable: true
+                    description: 仅 `time_range` 使用，可为 `null`；其他类型传 `null`
+                recurrence:
+                    nullable: true
+                    allOf:
+                        - $ref: "#/components/schemas/Recurrence"
+                    description: 仅 `recurring` 使用，且该类型下必填；其他类型传 `null`
+
+        ScheduleResponse:
+            type: object
+            required: [code, data]
+            properties:
+                code: { type: integer, enum: [200] }
+                data: { $ref: "#/components/schemas/Schedule" }
+
+        ScheduleListResponse:
+            type: object
+            required: [code, data]
+            properties:
+                code: { type: integer, enum: [200] }
+                data:
+                    type: array
+                    items: { $ref: "#/components/schemas/Schedule" }
+
+        DeleteScheduleResponse:
+            type: object
+            required: [code, data]
+            properties:
+                code: { type: integer, enum: [200] }
+                data:
+                    type: object
+                    required: [id]
+                    properties:
+                        id: { type: integer, format: int64 }
+
+        ErrorResponse:
+            type: object
+            required: [code, data]
+            properties:
+                code: { type: integer, enum: [400, 404, 500] }
+                data:
+                    type: object
+                    required: [message]
+                    properties:
+                        message: { type: string }

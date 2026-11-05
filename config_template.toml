@@ -1,0 +1,2 @@
+addr = "0.0.0.0:9276"
+db_path = "schedule.db"
