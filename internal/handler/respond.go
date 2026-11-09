@@ -18,7 +18,7 @@ func writeError(c *gin.Context, err error) {
 	} else {
 		msg = err.Error()
 	}
-	var errResp openapi.ErrorResponse
+	var errResp *openapi.ErrorResponse
 	if errors.As(err, &errResp) {
 		c.JSON(200, errResp)
 		return

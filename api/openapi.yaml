@@ -79,7 +79,7 @@ paths:
                                                   frequency: weekly
                                                   interval: 1
                                                   start_at: "2026-11-04T01:00:00Z"
-                                                  days_of_week: [1, 3, 5]
+                                                  day_of_week: 3
                                                   timezone: Asia/Shanghai
                                 internalError:
                                     value:
@@ -282,7 +282,7 @@ components:
                     description: |
                         重复间隔，单位由 `frequency` 决定：
                         - `daily`：每 `interval` 天
-                        - `weekly`：每 `interval` 周；配置 `days_of_week` 时，在每个间隔周内这些星期几发生
+                        - `weekly`：每 `interval` 周；配置 `day_of_week` 时，在每个间隔周内星期几发生
                         - `monthly`：每 `interval` 个月
                         - `yearly`：每 `interval` 年
                         默认值为 1，表示每个频率单位发生一次。

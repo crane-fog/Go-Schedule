@@ -1,6 +1,7 @@
 package storage
 
 import (
+	"errors"
 	"schedule/internal/openapi"
 
 	"github.com/glebarez/sqlite"
@@ -44,16 +45,16 @@ func (store *Store) GetSchedules() ([]openapi.Schedule, error) {
 	return result, nil
 }
 
-func (store *Store) CreateSchedule(schedule *openapi.CreateScheduleRequest) (*openapi.Schedule, error) {
+func (store *Store) CreateSchedule(req *openapi.CreateScheduleRequest) (*openapi.Schedule, error) {
 	s := Schedules{Schedule: openapi.Schedule{
-		Title: schedule.Title,
-		Type: schedule.Type,
-		Priority: schedule.Priority,
-		Done: false,
-		HappenTime: schedule.HappenTime,
-		StartAt: schedule.StartAt,
-		EndAt: schedule.EndAt,
-		Recurrence: schedule.Recurrence,
+		Title:      req.Title,
+		Type:       req.Type,
+		Priority:   req.Priority,
+		Done:       false,
+		HappenTime: req.HappenTime,
+		StartAt:    req.StartAt,
+		EndAt:      req.EndAt,
+		Recurrence: req.Recurrence,
 	}}
 	if err := store.db.Create(&s).Error; err != nil {
 		return nil, err
@@ -61,19 +62,22 @@ func (store *Store) CreateSchedule(schedule *openapi.CreateScheduleRequest) (*op
 	return &s.Schedule, nil
 }
 
-func (store *Store) UpdateSchedule(id int64, schedule *openapi.UpdateScheduleRequest) (*openapi.Schedule, error) {
+func (store *Store) UpdateSchedule(id int64, req *openapi.UpdateScheduleRequest) (*openapi.Schedule, error) {
 	var s Schedules
 	if err := store.db.First(&s, id).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, ErrNotFound
+		}
 		return nil, err
 	}
-	s.Title = schedule.Title
-	s.Type = schedule.Type
-	s.Priority = schedule.Priority
-	s.Done = schedule.Done
-	s.HappenTime = schedule.HappenTime
-	s.StartAt = schedule.StartAt
-	s.EndAt = schedule.EndAt
-	s.Schedule.Recurrence = schedule.Recurrence
+	s.Title = req.Title
+	s.Type = req.Type
+	s.Priority = req.Priority
+	s.Done = req.Done
+	s.HappenTime = req.HappenTime
+	s.StartAt = req.StartAt
+	s.EndAt = req.EndAt
+	s.Schedule.Recurrence = req.Recurrence
 	if err := store.db.Save(&s).Error; err != nil {
 		return nil, err
 	}
@@ -86,7 +90,7 @@ func (store *Store) DeleteSchedule(id int64) error {
 		return result.Error
 	}
 	if result.RowsAffected == 0 {
-		return gorm.ErrRecordNotFound
+		return ErrNotFound
 	}
 	return nil
 }
