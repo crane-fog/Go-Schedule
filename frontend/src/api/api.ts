@@ -145,6 +145,10 @@ export interface Recurrence {
      * 计算重复时间使用的时区
      */
     'timezone'?: string;
+    /**
+     * 已完成的发生序号列表（从 1 开始，例如 `[1, 3]` 表示第 1 次和第 3 次发生已完成）
+     */
+    'completed_indices'?: Array<number>;
 }
 
 export const RecurrenceFrequencyEnum = {

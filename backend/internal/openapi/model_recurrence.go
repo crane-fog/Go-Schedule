@@ -42,4 +42,7 @@ type Recurrence struct {
 
 	// 计算重复时间使用的时区
 	Timezone string `json:"timezone,omitempty"`
+
+	// 已完成的发生序号列表（从 1 开始，例如 `[1, 3]` 表示第 1 次和第 3 次发生已完成）
+	CompletedIndices []int32 `json:"completed_indices,omitempty"`
 }
