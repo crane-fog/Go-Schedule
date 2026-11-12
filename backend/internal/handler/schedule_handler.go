@@ -15,7 +15,7 @@ type ScheduleService interface {
 }
 
 type ScheduleHandler struct {
-    scheduleService ScheduleService
+	scheduleService ScheduleService
 }
 
 func NewScheduleHandler(s ScheduleService) *ScheduleHandler {

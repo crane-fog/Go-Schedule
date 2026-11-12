@@ -1,0 +1,40 @@
+exclude: |
+    (?x)^(
+        frontend/src/api/(api|base|common|configuration|index)\.ts|
+        backend/internal/openapi/model_.*\.go
+    )$
+
+repos:
+    - repo: https://github.com/pre-commit/pre-commit-hooks
+      rev: v6.0.0
+      hooks:
+          - id: trailing-whitespace
+          - id: end-of-file-fixer
+          - id: check-yaml
+            exclude: (^|/)pnpm-lock\.yaml$
+          - id: check-added-large-files
+            args: ["--maxkb=2048"]
+
+    - repo: local
+      hooks:
+          - id: frontend-lint
+            name: Frontend Lint
+            entry: pnpm --prefix=frontend lint
+            language: system
+            files: ^frontend/.*\.(ts|vue|css)$
+            pass_filenames: false
+
+          - id: frontend-format
+            name: Frontend Format
+            entry: pnpm --prefix=frontend format
+            language: system
+            files: ^frontend/.*\.(ts|vue|css)$
+            pass_filenames: false
+
+          - id: backend-format
+            name: Backend Format
+            entry: gofmt -w
+            files: ^backend/.*\.(go)$
+            language: system
+            types:
+                - go

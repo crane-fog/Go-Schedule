@@ -28,7 +28,7 @@ func main() {
 	h := handler.NewScheduleHandler(s)
 	r := router.NewRouter(router.Handlers{ScheduleHandler: h})
 
-	if err := r.Run(cfg.Addr); err != nil{
+	if err := r.Run(cfg.Addr); err != nil {
 		panic(err)
 	}
 }
