@@ -106,7 +106,7 @@ export interface ErrorResponseData {
 export type ListSchedules200Response = ErrorResponse | ScheduleListResponse;
 
 /**
- * 定期重复配置。每个发生点视为一次 `one_time` 事件。 `interval` 表示“每隔几个 frequency 单位”，不是固定天数。 `until` 与 `count` 二选一，都不提供表示无限重复。 
+ * 定期重复配置。每个发生点视为一次 `one_time` 事件。 `interval` 表示“每隔几个 frequency 单位”，不是固定天数。 `until` 与 `count` 二选一，都不提供表示无限重复。 `timezone` 由客户端自动注入创建/修改时的设备时区，用于锚定重复规则的日历与挂钟时间。 
  */
 export interface Recurrence {
     /**
@@ -142,9 +142,9 @@ export interface Recurrence {
      */
     'month'?: number;
     /**
-     * 计算重复时间使用的时区
+     * 创建/修改该周期日程时的设备 IANA 时区（如 `Asia/Shanghai`），由客户端自动注入，用于计算每次发生的时间点
      */
-    'timezone'?: string;
+    'timezone': string;
     /**
      * 已完成的发生序号列表（从 1 开始，例如 `[1, 3]` 表示第 1 次和第 3 次发生已完成）
      */

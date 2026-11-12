@@ -13,7 +13,7 @@ import (
 	"time"
 )
 
-// Recurrence - 定期重复配置。每个发生点视为一次 `one_time` 事件。 `interval` 表示“每隔几个 frequency 单位”，不是固定天数。 `until` 与 `count` 二选一，都不提供表示无限重复。 
+// Recurrence - 定期重复配置。每个发生点视为一次 `one_time` 事件。 `interval` 表示“每隔几个 frequency 单位”，不是固定天数。 `until` 与 `count` 二选一，都不提供表示无限重复。 `timezone` 由客户端自动注入创建/修改时的设备时区，用于锚定重复规则的日历与挂钟时间。 
 type Recurrence struct {
 
 	// 重复频率
@@ -40,8 +40,8 @@ type Recurrence struct {
 	// 每年几月；仅 `frequency=yearly` 时使用
 	Month int32 `json:"month,omitempty"`
 
-	// 计算重复时间使用的时区
-	Timezone string `json:"timezone,omitempty"`
+	// 创建/修改该周期日程时的设备 IANA 时区（如 `Asia/Shanghai`），由客户端自动注入，用于计算每次发生的时间点
+	Timezone string `json:"timezone"`
 
 	// 已完成的发生序号列表（从 1 开始，例如 `[1, 3]` 表示第 1 次和第 3 次发生已完成）
 	CompletedIndices []int32 `json:"completed_indices,omitempty"`
