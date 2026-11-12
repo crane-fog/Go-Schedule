@@ -1,0 +1,123 @@
+name: Build and Deploy to Linux Server
+
+on:
+    push:
+        branches: [main]
+        paths:
+            - backend/**
+            - frontend/**
+    pull_request:
+        branches: [main]
+        paths:
+            - backend/**
+            - frontend/**
+    workflow_dispatch:
+
+jobs:
+    build_frontend:
+        runs-on: ubuntu-latest
+        steps:
+            - name: Checkout
+              uses: actions/checkout@v6
+
+            - name: Install pnpm
+              uses: pnpm/action-setup@v5
+              with:
+                  version: 12
+
+            - name: Setup Node.js
+              uses: actions/setup-node@v6
+              with:
+                  node-version: 24
+                  cache: pnpm
+                  cache-dependency-path: frontend/pnpm-lock.yaml
+
+            - name: Install frontend dependencies
+              run: pnpm install --frozen-lockfile
+              working-directory: frontend
+
+            - name: Build frontend
+              run: pnpm build
+              working-directory: frontend
+
+            - name: Upload artifact
+              uses: actions/upload-artifact@v6
+              with:
+                  name: frontend
+                  path: ./frontend/dist
+                  retention-days: 7
+
+    build_backend:
+        runs-on: ubuntu-latest
+        env:
+            GIN_MODE: release
+        steps:
+            - name: Checkout code
+              uses: actions/checkout@v6
+
+            - uses: actions/setup-go@v7
+              with:
+                  go-version: "1.27"
+                  go-version-file: 'backend/go.mod'
+                  cache-dependency-path: 'backend/go.sum'
+
+            - name: Restore dependencies
+              run: go mod download
+              working-directory: backend
+
+            - name: Build publish backend
+              run: go build -o ./bin/server ./cmd/server
+              working-directory: backend
+
+            - name: Upload Artifact
+              uses: actions/upload-artifact@v6
+              with:
+                  name: linux-x64-backend
+                  path: ./backend/bin
+                  retention-days: 7
+
+    deploy:
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main' # 仅在推送到 main 时部署
+
+        # 只允许同时进行一个部署任务，后续排队
+        concurrency:
+            group: deploy-db-project
+            cancel-in-progress: false
+        environment:
+            name: server
+        needs: [build_frontend, build_backend]
+        runs-on: ubuntu-latest
+        steps:
+            - name: Download artifacts
+              uses: actions/download-artifact@v8
+              with:
+                  path: ./artifacts
+
+            - name: Upload packages to server
+              uses: appleboy/scp-action@v1
+              with:
+                  host: ${{ secrets.HOST }}
+                  username: ${{ secrets.USERNAME }}
+                  key: ${{ secrets.PRIVATE_KEY }}
+                  port: ${{ secrets.PORT }}
+                  source: artifacts/*
+                  target: /var/www/go-schedule/cd_tmp
+
+            - name: Deploy and restart service
+              uses: appleboy/ssh-action@v1
+              with:
+                  host: ${{ secrets.HOST }}
+                  username: ${{ secrets.USERNAME }}
+                  key: ${{ secrets.PRIVATE_KEY }}
+                  port: ${{ secrets.PORT }}
+                  script: |
+                      set -e
+                      sudo systemctl stop Go-Schedule
+                      cd /var/www/go-schedule
+                      rm -rf frontend
+                      rm -f backend/server
+                      mv cd_tmp/artifacts/frontend frontend
+                      mv cd_tmp/artifacts/linux-x64-backend backend
+                      chmod +x backend/server
+                      sudo systemctl start Go-Schedule
+                      sudo systemctl --no-pager --full status Go-Schedule | head -n 30
