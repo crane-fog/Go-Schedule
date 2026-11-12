@@ -322,6 +322,12 @@ components:
                     type: string
                     default: UTC
                     description: 计算重复时间使用的时区
+                completed_indices:
+                    type: array
+                    items:
+                        type: integer
+                        minimum: 1
+                    description: 已完成的发生序号列表（从 1 开始，例如 `[1, 3]` 表示第 1 次和第 3 次发生已完成）
 
         CreateScheduleRequest:
             type: object
