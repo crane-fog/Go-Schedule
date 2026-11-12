@@ -272,7 +272,8 @@ components:
                 定期重复配置。每个发生点视为一次 `one_time` 事件。
                 `interval` 表示“每隔几个 frequency 单位”，不是固定天数。
                 `until` 与 `count` 二选一，都不提供表示无限重复。
-            required: [frequency, start_at]
+                `timezone` 由客户端自动注入创建/修改时的设备时区，用于锚定重复规则的日历与挂钟时间。
+            required: [frequency, start_at, timezone]
             properties:
                 frequency:
                     type: string
@@ -320,8 +321,7 @@ components:
                     description: 每年几月；仅 `frequency=yearly` 时使用
                 timezone:
                     type: string
-                    default: UTC
-                    description: 计算重复时间使用的时区
+                    description: 创建/修改该周期日程时的设备 IANA 时区（如 `Asia/Shanghai`），由客户端自动注入，用于计算每次发生的时间点
                 completed_indices:
                     type: array
                     items:
