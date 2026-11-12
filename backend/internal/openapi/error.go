@@ -1,5 +1,5 @@
 package openapi
 
-func (e ErrorResponse) Error() string {
+func (e *ErrorResponse) Error() string {
 	return e.Data.Message
 }
