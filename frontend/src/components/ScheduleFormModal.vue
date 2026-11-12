@@ -8,16 +8,15 @@ import {
   type UpdateScheduleRequest,
 } from '@/api'
 import {
-  WEEKDAY_LABELS,
   buildCreatePayload,
   buildUpdatePayload,
   createDefaultFormState,
+  formatInferredRecurrenceHint,
   scheduleToFormState,
   validateScheduleForm,
   type ScheduleFormState,
 } from '@/utils/schedule-helpers'
 
-/* oxlint-disable one-var */
 const {
   visible,
   editingItem = undefined,
@@ -37,6 +36,9 @@ const emit = defineEmits<{
 const form = reactive<ScheduleFormState>(createDefaultFormState())
 const formError = ref<string | undefined>(undefined)
 const isEditing = computed(() => Boolean(editingItem))
+const recurrenceHint = computed(() =>
+  formatInferredRecurrenceHint(form.frequency, form.interval, form.recurrenceStartLocal),
+)
 const typeOptions = [
   { desc: '指定单个发生时间点', label: '单次日程', value: ScheduleTypeEnum.OneTime },
   { desc: '包含开始与结束时间', label: '时间段', value: ScheduleTypeEnum.TimeRange },
@@ -220,53 +222,16 @@ function handleSubmit(): void {
               </div>
             </div>
 
-            <div class="form-row">
-              <div class="form-group">
-                <label class="form-label" for="rec-start">首次发生时间 *</label>
-                <input
-                  id="rec-start"
-                  v-model="form.recurrenceStartLocal"
-                  type="datetime-local"
-                  class="form-input"
-                  required
-                />
-              </div>
-
-              <div v-if="form.frequency === RecurrenceFrequencyEnum.Weekly" class="form-group">
-                <label class="form-label" for="rec-dow">星期几</label>
-                <select id="rec-dow" v-model.number="form.dayOfWeek" class="form-input">
-                  <option v-for="(label, idx) in WEEKDAY_LABELS" :key="idx" :value="idx">
-                    {{ label }} ({{ idx }})
-                  </option>
-                </select>
-              </div>
-
-              <div
-                v-else-if="form.frequency === RecurrenceFrequencyEnum.Monthly"
-                class="form-group"
-              >
-                <label class="form-label" for="rec-dom">每月几号 (1-31)</label>
-                <input
-                  id="rec-dom"
-                  v-model.number="form.dayOfMonth"
-                  type="number"
-                  min="1"
-                  max="31"
-                  class="form-input"
-                />
-              </div>
-
-              <div v-else-if="form.frequency === RecurrenceFrequencyEnum.Yearly" class="form-group">
-                <label class="form-label" for="rec-month">每年几月 (1-12)</label>
-                <input
-                  id="rec-month"
-                  v-model.number="form.month"
-                  type="number"
-                  min="1"
-                  max="12"
-                  class="form-input"
-                />
-              </div>
+            <div class="form-group">
+              <label class="form-label" for="rec-start">首次发生时间 *</label>
+              <input
+                id="rec-start"
+                v-model="form.recurrenceStartLocal"
+                type="datetime-local"
+                class="form-input"
+                required
+              />
+              <p class="form-help">{{ recurrenceHint }}</p>
             </div>
 
             <div class="form-row">
@@ -299,17 +264,6 @@ function handleSubmit(): void {
                   min="1"
                   class="form-input"
                   required
-                />
-              </div>
-
-              <div class="form-group">
-                <label class="form-label" for="rec-tz">时区</label>
-                <input
-                  id="rec-tz"
-                  v-model="form.timezone"
-                  type="text"
-                  class="form-input"
-                  placeholder="Asia/Shanghai 或 UTC"
                 />
               </div>
             </div>
@@ -445,7 +399,7 @@ function handleSubmit(): void {
 
 .form-help {
   font-size: 0.78rem;
-  color: var(--text-muted);
+  color: var(--text-primary);
 }
 
 .type-selector {

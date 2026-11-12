@@ -24,10 +24,6 @@ export interface ScheduleFormState {
   endMode: RecurrenceEndMode
   untilLocal: string
   count: number
-  dayOfWeek: number
-  dayOfMonth: number
-  month: number
-  timezone: string
   completedIndices: number[]
 }
 
@@ -141,19 +137,6 @@ export function getPriorityMeta(priority: number): { label: string; level: strin
   return { label, level: 'normal' }
 }
 
-function formatRecurrenceDetail(rec: Recurrence): string {
-  if (rec.frequency === RecurrenceFrequencyEnum.Weekly && rec.day_of_week !== undefined) {
-    return WEEKDAY_LABELS[rec.day_of_week] ?? ''
-  }
-  if (rec.frequency === RecurrenceFrequencyEnum.Monthly && rec.day_of_month) {
-    return `每月 ${rec.day_of_month} 日`
-  }
-  if (rec.frequency === RecurrenceFrequencyEnum.Yearly && rec.month) {
-    return `每年 ${rec.month} 月`
-  }
-  return ''
-}
-
 function formatRecurrenceEnd(rec: Recurrence): string {
   if (rec.until) {
     return `截止至 ${formatDateTime(rec.until)}`
@@ -164,32 +147,84 @@ function formatRecurrenceEnd(rec: Recurrence): string {
   return '长期有效'
 }
 
-function formatFrequencyText(rec: Recurrence): string {
-  const unit = FREQUENCY_LABELS[rec.frequency] ?? rec.frequency
+function formatFrequencyWithDetail(rec: Recurrence): string {
+  const unit = FREQUENCY_LABELS[rec.frequency] ?? rec.frequency,
+    startDate = new Date(rec.start_at),
+    validStart = !Number.isNaN(startDate.getTime())
+  let prefix = `每${unit}`
   if (rec.interval && rec.interval > 1) {
-    return `每 ${rec.interval} ${unit}`
+    prefix = `每 ${rec.interval} ${unit}`
   }
-  return `每${unit}`
+  if (rec.frequency === RecurrenceFrequencyEnum.Weekly && validStart) {
+    const weekday = WEEKDAY_LABELS[startDate.getDay()] ?? ''
+    if (rec.interval && rec.interval > 1) {
+      return `${prefix}${weekday}`
+    }
+    return `每${weekday}`
+  }
+  if (rec.frequency === RecurrenceFrequencyEnum.Monthly && validStart) {
+    return `${prefix} ${startDate.getDate()} 日`
+  }
+  if (rec.frequency === RecurrenceFrequencyEnum.Yearly && validStart) {
+    return `${prefix} ${startDate.getMonth() + 1} 月 ${startDate.getDate()} 日`
+  }
+  return prefix
 }
 
 export function formatRecurrenceSummary(rec: Recurrence | null | undefined): string {
   if (!rec) {
     return '未配置重复规则'
   }
-  const parts = [formatFrequencyText(rec), formatRecurrenceDetail(rec), formatRecurrenceEnd(rec)]
+  const parts = [formatFrequencyWithDetail(rec), formatRecurrenceEnd(rec)]
   return parts.filter(Boolean).join(' · ')
+}
+
+function formatPeriodPrefix(frequency: RecurrenceFrequencyEnum, interval: number): string {
+  const unit = FREQUENCY_LABELS[frequency] ?? frequency
+  if (interval > 1) {
+    return `每 ${interval} ${unit}`
+  }
+  if (frequency === RecurrenceFrequencyEnum.Monthly) {
+    return '每月'
+  }
+  return `每${unit}`
+}
+
+export function formatInferredRecurrenceHint(
+  frequency: RecurrenceFrequencyEnum,
+  interval: number,
+  startLocal: string,
+): string {
+  const date = new Date(startLocal.trim()),
+    timeStr = `${padTwo(date.getHours())}:${padTwo(date.getMinutes())}`,
+    periodPrefix = formatPeriodPrefix(frequency, Math.max(1, Math.trunc(interval || 1)))
+  if (!startLocal.trim() || Number.isNaN(date.getTime())) {
+    return '请先选择首次发生时间'
+  }
+  if (frequency === RecurrenceFrequencyEnum.Weekly) {
+    const weekday = FULL_WEEKDAY_LABELS[date.getDay()] ?? ''
+    return `将于${periodPrefix}的 ${weekday} ${timeStr} 发生`
+  }
+  if (frequency === RecurrenceFrequencyEnum.Monthly) {
+    return `将于${periodPrefix}的 ${date.getDate()} 日 ${timeStr} 发生`
+  }
+  if (frequency === RecurrenceFrequencyEnum.Yearly) {
+    return `将于${periodPrefix}的 ${date.getMonth() + 1} 月 ${date.getDate()} 日 ${timeStr} 发生`
+  }
+  return `将于${periodPrefix}的 ${timeStr} 发生`
+}
+
+export function getCurrentDeviceTimezone(): string {
+  return new Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC'
 }
 
 export function createDefaultFormState(): ScheduleFormState {
   const now = new Date(),
-    nextHour = new Date(now.getTime() + 60 * 60 * 1000),
-    defaultTz = new Intl.DateTimeFormat().resolvedOptions().timeZone || 'Asia/Shanghai'
+    nextHour = new Date(now.getTime() + 60 * 60 * 1000)
 
   return {
     completedIndices: [],
     count: 10,
-    dayOfMonth: now.getDate(),
-    dayOfWeek: now.getDay(),
     description: '',
     done: false,
     endAtLocal: dateToLocalInput(nextHour),
@@ -197,11 +232,9 @@ export function createDefaultFormState(): ScheduleFormState {
     frequency: RecurrenceFrequencyEnum.Weekly,
     happenTimeLocal: dateToLocalInput(now),
     interval: 1,
-    month: now.getMonth() + 1,
     priority: 0,
     recurrenceStartLocal: dateToLocalInput(now),
     startAtLocal: dateToLocalInput(now),
-    timezone: defaultTz,
     title: '',
     type: ScheduleTypeEnum.OneTime,
     untilLocal: '',
@@ -233,8 +266,6 @@ export function scheduleToFormState(item: Schedule): ScheduleFormState {
     ...defaults,
     completedIndices: [...(rec?.completed_indices ?? [])],
     count: positiveOrDefault(rec?.count, 10),
-    dayOfMonth: positiveOrDefault(rec?.day_of_month, defaults.dayOfMonth),
-    dayOfWeek: rec?.day_of_week ?? defaults.dayOfWeek,
     description: item.description ?? '',
     done: item.done,
     endAtLocal: isoToLocalInput(item.end_at) || defaults.endAtLocal,
@@ -242,11 +273,9 @@ export function scheduleToFormState(item: Schedule): ScheduleFormState {
     frequency: rec?.frequency ?? defaults.frequency,
     happenTimeLocal: isoToLocalInput(item.happen_time) || defaults.happenTimeLocal,
     interval: positiveOrDefault(rec?.interval, 1),
-    month: positiveOrDefault(rec?.month, defaults.month),
     priority: item.priority,
     recurrenceStartLocal: isoToLocalInput(rec?.start_at) || defaults.recurrenceStartLocal,
     startAtLocal: isoToLocalInput(item.start_at) || defaults.startAtLocal,
-    timezone: rec?.timezone || defaults.timezone,
     title: item.title,
     type: item.type,
     untilLocal: isoToLocalInput(rec?.until),
@@ -310,19 +339,12 @@ function buildRecurrenceObject(form: ScheduleFormState): Recurrence {
       frequency: form.frequency,
       interval: Math.max(1, Math.trunc(form.interval || 1)),
       start_at: startIso,
-      timezone: form.timezone.trim() || 'UTC',
+      timezone: getCurrentDeviceTimezone(),
     }
   if (form.endMode === 'until') {
     rec.until = localInputToIso(form.untilLocal)
   } else if (form.endMode === 'count') {
     rec.count = Math.max(1, Math.trunc(form.count || 1))
-  }
-  if (form.frequency === RecurrenceFrequencyEnum.Weekly) {
-    rec.day_of_week = Math.min(6, Math.max(0, Math.trunc(form.dayOfWeek)))
-  } else if (form.frequency === RecurrenceFrequencyEnum.Monthly) {
-    rec.day_of_month = Math.min(31, Math.max(1, Math.trunc(form.dayOfMonth)))
-  } else if (form.frequency === RecurrenceFrequencyEnum.Yearly) {
-    rec.month = Math.min(12, Math.max(1, Math.trunc(form.month)))
   }
   if (form.completedIndices.length > 0) {
     rec.completed_indices = [...form.completedIndices]

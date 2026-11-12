@@ -84,15 +84,6 @@ func validateRecurrence(r *openapi.Recurrence) error {
 	if r.Count != nil && *r.Count < 1 {
 		return badRequest("recurrence.count 必须大于等于 1")
 	}
-	if r.DayOfWeek < 0 || r.DayOfWeek > 6 {
-		return badRequest("recurrence.day_of_week 必须在 0 到 6 之间")
-	}
-	if r.DayOfMonth < 0 || r.DayOfMonth > 31 {
-		return badRequest("recurrence.day_of_month 必须在 1 到 31 之间（0 表示未设置）")
-	}
-	if r.Month < 0 || r.Month > 12 {
-		return badRequest("recurrence.month 必须在 1 到 12 之间（0 表示未设置）")
-	}
 	for _, idx := range r.CompletedIndices {
 		if idx < 1 {
 			return badRequest("recurrence.completed_indices 中的序号必须大于等于 1")

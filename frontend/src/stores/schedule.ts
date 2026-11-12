@@ -1,4 +1,3 @@
-/* oxlint-disable one-var */
 import { computed, ref, watch } from 'vue'
 import { defineStore } from 'pinia'
 import {
@@ -125,6 +124,9 @@ export const useScheduleStore = defineStore('schedule', () => {
   }
 
   async function toggleDone(entry: ScheduleDisplayItem): Promise<void> {
+    if (entry.rangeRole === 'start') {
+      return
+    }
     const { schedule, occurrenceIndex } = entry
     if (schedule.type === ScheduleTypeEnum.Recurring) {
       if (occurrenceIndex !== undefined) {

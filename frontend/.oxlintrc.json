@@ -29,6 +29,7 @@
       }
     ],
     "max-statements": ["error", 30],
-    "sort-imports": "off"
+    "sort-imports": "off",
+    "one-var": "off"
   }
 }

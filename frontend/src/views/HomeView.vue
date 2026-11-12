@@ -1,5 +1,4 @@
 <script setup lang="ts">
-/* oxlint-disable one-var */
 import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import {
   ScheduleTypeEnum,
@@ -10,6 +9,7 @@ import {
 import { extractErrorMessage } from '@/api/client'
 import ScheduleCard from '@/components/ScheduleCard.vue'
 import ScheduleFormModal from '@/components/ScheduleFormModal.vue'
+import TimeRangeConnectors from '@/components/TimeRangeConnectors.vue'
 import { useScheduleStore } from '@/stores/schedule'
 import { formatDateDivider, getDateGroupKey } from '@/utils/schedule-helpers'
 import type { ScheduleDisplayItem } from '@/utils/schedule-occurrences'
@@ -18,6 +18,8 @@ const store = useScheduleStore()
 const modalVisible = ref(false)
 const editingSchedule = ref<Schedule | undefined>(undefined)
 const sentinelRef = ref<HTMLElement | undefined>(undefined)
+const scheduleListRef = ref<HTMLElement | undefined>(undefined)
+const connectorGutterPx = ref(0)
 
 let observer: IntersectionObserver | undefined = undefined
 
@@ -80,6 +82,9 @@ function resetFilters(): void {
 }
 
 function shouldShowDateDivider(idx: number): boolean {
+  if (store.sortMode !== 'time') {
+    return false
+  }
   const current = store.displayedSchedules[idx]
   if (!current) {
     return false
@@ -245,7 +250,19 @@ onBeforeUnmount(() => {
         <button type="button" class="btn btn-secondary" @click="resetFilters">重置筛选条件</button>
       </div>
 
-      <div v-else class="schedule-list">
+      <div
+        v-else
+        ref="scheduleListRef"
+        class="schedule-list"
+        :style="{ '--connector-gutter': `${connectorGutterPx}px` }"
+      >
+        <TimeRangeConnectors
+          :entries="store.displayedSchedules"
+          :list-el="scheduleListRef"
+          :enabled="store.sortMode === 'time'"
+          @gutter-change="connectorGutterPx = $event"
+        />
+
         <template v-for="(entry, idx) in store.displayedSchedules" :key="entry.key">
           <div v-if="shouldShowDateDivider(idx)" class="date-divider">
             <span class="date-divider-text">{{ formatDateDivider(entry.sortTimeMs) }}</span>
@@ -442,9 +459,16 @@ onBeforeUnmount(() => {
 }
 
 .schedule-list {
+  position: relative;
   display: flex;
   flex-direction: column;
   gap: 0.75rem;
+}
+
+@media (max-width: 1120px) {
+  .schedule-list {
+    margin-left: var(--connector-gutter, 0px);
+  }
 }
 
 .date-divider {

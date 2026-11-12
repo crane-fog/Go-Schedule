@@ -1,8 +1,9 @@
-/* oxlint-disable one-var */
 import { RecurrenceFrequencyEnum, ScheduleTypeEnum, type Recurrence, type Schedule } from '@/api'
 
 export type SortMode = 'time' | 'priority'
 export type StatusFilter = 'all' | 'pending' | 'done'
+
+export type TimeRangeRole = 'start' | 'end'
 
 export interface ScheduleDisplayItem {
   key: string
@@ -10,6 +11,7 @@ export interface ScheduleDisplayItem {
   sortTimeMs: number
   occurrenceIso?: string | undefined
   occurrenceIndex?: number | undefined
+  rangeRole?: TimeRangeRole | undefined
   effectiveDone: boolean
 }
 
@@ -26,12 +28,154 @@ export interface ExpandResult {
   hasMore: boolean
 }
 
+interface ZonedWallTime {
+  year: number
+  month: number
+  day: number
+  weekday: number
+  hour: number
+  minute: number
+  second: number
+  millisecond: number
+}
+
+const WEEKDAY_SHORT_MAP: Record<string, number> = {
+  Fri: 5,
+  Mon: 1,
+  Sat: 6,
+  Sun: 0,
+  Thu: 4,
+  Tue: 2,
+  Wed: 3,
+}
+
+const formatterCache = new Map<string, Intl.DateTimeFormat>()
+
+function createZonedFormatter(timeZone: string): Intl.DateTimeFormat {
+  try {
+    return new Intl.DateTimeFormat('en-US', {
+      day: '2-digit',
+      hour: '2-digit',
+      hourCycle: 'h23',
+      minute: '2-digit',
+      month: '2-digit',
+      second: '2-digit',
+      timeZone,
+      weekday: 'short',
+      year: 'numeric',
+    })
+  } catch {
+    return new Intl.DateTimeFormat('en-US', {
+      day: '2-digit',
+      hour: '2-digit',
+      hourCycle: 'h23',
+      minute: '2-digit',
+      month: '2-digit',
+      second: '2-digit',
+      weekday: 'short',
+      year: 'numeric',
+    })
+  }
+}
+
+function getZonedFormatter(timeZone: string): Intl.DateTimeFormat {
+  const cached = formatterCache.get(timeZone)
+  if (cached) {
+    return cached
+  }
+  const formatter = createZonedFormatter(timeZone)
+  formatterCache.set(timeZone, formatter)
+  return formatter
+}
+
+function extractZonedWallTime(date: Date, timeZone: string): ZonedWallTime {
+  const parts = getZonedFormatter(timeZone).formatToParts(date)
+  let year = 1970
+  let month = 1
+  let day = 1
+  let weekday = 0
+  let hour = 0
+  let minute = 0
+  let second = 0
+  for (const part of parts) {
+    if (part.type === 'year') {
+      year = Number(part.value)
+    } else if (part.type === 'month') {
+      month = Number(part.value)
+    } else if (part.type === 'day') {
+      day = Number(part.value)
+    } else if (part.type === 'weekday') {
+      weekday = WEEKDAY_SHORT_MAP[part.value] ?? 0
+    } else if (part.type === 'hour') {
+      hour = Number(part.value) % 24
+    } else if (part.type === 'minute') {
+      minute = Number(part.value)
+    } else if (part.type === 'second') {
+      second = Number(part.value)
+    }
+  }
+  return {
+    day,
+    hour,
+    millisecond: date.getUTCMilliseconds(),
+    minute,
+    month,
+    second,
+    weekday,
+    year,
+  }
+}
+
+function getOffsetMsAtInstant(instantMs: number, timeZone: string): number {
+  const wall = extractZonedWallTime(new Date(instantMs), timeZone)
+  const wallAsUtcMs = Date.UTC(
+    wall.year,
+    wall.month - 1,
+    wall.day,
+    wall.hour,
+    wall.minute,
+    wall.second,
+    wall.millisecond,
+  )
+  return wallAsUtcMs - instantMs
+}
+
+function zonedWallTimeToDate(wall: ZonedWallTime, timeZone: string): Date {
+  const utcGuess = Date.UTC(
+    wall.year,
+    wall.month - 1,
+    wall.day,
+    wall.hour,
+    wall.minute,
+    wall.second,
+    wall.millisecond,
+  )
+  const firstOffset = getOffsetMsAtInstant(utcGuess, timeZone)
+  const firstPassMs = utcGuess - firstOffset
+  const secondOffset = getOffsetMsAtInstant(firstPassMs, timeZone)
+  return new Date(utcGuess - secondOffset)
+}
+
+function addDaysToYmd(
+  year: number,
+  month: number,
+  day: number,
+): { year: number; month: number; day: number; weekday: number } {
+  const utcDate = new Date(Date.UTC(year, month - 1, day))
+  return {
+    day: utcDate.getUTCDate(),
+    month: utcDate.getUTCMonth() + 1,
+    weekday: utcDate.getUTCDay(),
+    year: utcDate.getUTCFullYear(),
+  }
+}
+
 function getCompletedIndexSet(rec: Recurrence | null | undefined): ReadonlySet<number> {
   return new Set<number>(rec?.completed_indices)
 }
 
-function getDaysInMonth(year: number, monthZeroBased: number): number {
-  return new Date(year, monthZeroBased + 1, 0).getDate()
+function getDaysInMonth(year: number, monthOneBased: number): number {
+  return new Date(Date.UTC(year, monthOneBased, 0)).getUTCDate()
 }
 
 function parseTimeMs(iso: string | null | undefined): number {
@@ -45,80 +189,91 @@ function parseTimeMs(iso: string | null | undefined): number {
   return ms
 }
 
-function computeWeeklyDate(startDate: Date, step: number, rec: Recurrence): Date {
-  const interval = Math.max(1, rec.interval ?? 1)
-  const result = new Date(startDate)
+function computeWeeklyWall(startWall: ZonedWallTime, step: number, rec: Recurrence): ZonedWallTime {
   if (step === 0) {
-    return result
-  }
-  result.setDate(result.getDate() + step * interval * 7)
-  if (rec.day_of_week !== undefined && rec.day_of_week >= 0 && rec.day_of_week <= 6) {
-    const diff = rec.day_of_week - result.getDay()
-    result.setDate(result.getDate() + diff)
-  }
-  return result
-}
-
-function computeMonthlyDate(startDate: Date, step: number, rec: Recurrence): Date {
-  if (step === 0) {
-    return new Date(startDate)
+    return startWall
   }
   const interval = Math.max(1, rec.interval ?? 1)
-  const totalMonths = startDate.getMonth() + step * interval
-  const targetYear = startDate.getFullYear() + Math.floor(totalMonths / 12)
-  const targetMonth = ((totalMonths % 12) + 12) % 12
-  let desiredDay = startDate.getDate()
-  if (rec.day_of_month && rec.day_of_month > 0) {
-    desiredDay = rec.day_of_month
+  const shifted = addDaysToYmd(startWall.year, startWall.month, startWall.day + step * interval * 7)
+  return {
+    ...startWall,
+    day: shifted.day,
+    month: shifted.month,
+    weekday: shifted.weekday,
+    year: shifted.year,
   }
-  const clampedDay = Math.min(desiredDay, getDaysInMonth(targetYear, targetMonth))
-  return new Date(
-    targetYear,
-    targetMonth,
-    clampedDay,
-    startDate.getHours(),
-    startDate.getMinutes(),
-    startDate.getSeconds(),
-    startDate.getMilliseconds(),
-  )
 }
 
-function computeYearlyDate(startDate: Date, step: number, rec: Recurrence): Date {
+function computeMonthlyWall(
+  startWall: ZonedWallTime,
+  step: number,
+  rec: Recurrence,
+): ZonedWallTime {
   if (step === 0) {
-    return new Date(startDate)
+    return startWall
   }
   const interval = Math.max(1, rec.interval ?? 1)
-  const targetYear = startDate.getFullYear() + step * interval
-  let targetMonth = startDate.getMonth()
-  if (rec.month && rec.month >= 1 && rec.month <= 12) {
-    targetMonth = rec.month - 1
+  const totalMonths = startWall.month - 1 + step * interval
+  const targetYear = startWall.year + Math.floor(totalMonths / 12)
+  const targetMonth = (((totalMonths % 12) + 12) % 12) + 1
+  const clampedDay = Math.min(startWall.day, getDaysInMonth(targetYear, targetMonth))
+  return {
+    ...startWall,
+    day: clampedDay,
+    month: targetMonth,
+    year: targetYear,
   }
-  const clampedDay = Math.min(startDate.getDate(), getDaysInMonth(targetYear, targetMonth))
-  return new Date(
-    targetYear,
-    targetMonth,
-    clampedDay,
-    startDate.getHours(),
-    startDate.getMinutes(),
-    startDate.getSeconds(),
-    startDate.getMilliseconds(),
-  )
 }
 
-function computeDateByFrequency(startDate: Date, step: number, rec: Recurrence): Date {
+function computeYearlyWall(startWall: ZonedWallTime, step: number, rec: Recurrence): ZonedWallTime {
+  if (step === 0) {
+    return startWall
+  }
+  const interval = Math.max(1, rec.interval ?? 1)
+  const targetYear = startWall.year + step * interval
+  const targetMonth = startWall.month
+  const clampedDay = Math.min(startWall.day, getDaysInMonth(targetYear, targetMonth))
+  return {
+    ...startWall,
+    day: clampedDay,
+    month: targetMonth,
+    year: targetYear,
+  }
+}
+
+function computeWallByFrequency(
+  startWall: ZonedWallTime,
+  step: number,
+  rec: Recurrence,
+): ZonedWallTime {
   const interval = Math.max(1, rec.interval ?? 1)
   if (rec.frequency === RecurrenceFrequencyEnum.Daily) {
-    const daily = new Date(startDate)
-    daily.setDate(daily.getDate() + step * interval)
-    return daily
+    const shifted = addDaysToYmd(startWall.year, startWall.month, startWall.day + step * interval)
+    return {
+      ...startWall,
+      day: shifted.day,
+      month: shifted.month,
+      weekday: shifted.weekday,
+      year: shifted.year,
+    }
   }
   if (rec.frequency === RecurrenceFrequencyEnum.Weekly) {
-    return computeWeeklyDate(startDate, step, rec)
+    return computeWeeklyWall(startWall, step, rec)
   }
   if (rec.frequency === RecurrenceFrequencyEnum.Monthly) {
-    return computeMonthlyDate(startDate, step, rec)
+    return computeMonthlyWall(startWall, step, rec)
   }
-  return computeYearlyDate(startDate, step, rec)
+  return computeYearlyWall(startWall, step, rec)
+}
+
+function computeOccurrenceCandidate(startDate: Date, step: number, rec: Recurrence): Date {
+  if (step === 0) {
+    return startDate
+  }
+  const timeZone = rec.timezone || 'UTC'
+  const startWall = extractZonedWallTime(startDate, timeZone)
+  const targetWall = computeWallByFrequency(startWall, step, rec)
+  return zonedWallTimeToDate(targetWall, timeZone)
 }
 
 export function getOccurrenceDateAtStep(rec: Recurrence, step: number): Date | undefined {
@@ -129,7 +284,7 @@ export function getOccurrenceDateAtStep(rec: Recurrence, step: number): Date | u
   if (Number.isNaN(startDate.getTime())) {
     return undefined
   }
-  const candidate = computeDateByFrequency(startDate, step, rec)
+  const candidate = computeOccurrenceCandidate(startDate, step, rec)
   if (rec.until) {
     const untilMs = new Date(rec.until).getTime()
     if (!Number.isNaN(untilMs) && candidate.getTime() > untilMs) {
@@ -151,14 +306,27 @@ function matchesStatus(effectiveDone: boolean, statusFilter: StatusFilter): bool
 
 function toNonRecurringDisplayItem(item: Schedule): ScheduleDisplayItem {
   let timeIso = item.happen_time
+  let rangeRole: TimeRangeRole | undefined = undefined
   if (item.type === ScheduleTypeEnum.TimeRange) {
     timeIso = item.end_at ?? item.start_at
+    rangeRole = 'end'
   }
   return {
     effectiveDone: item.done,
     key: `schedule-${item.id}`,
+    rangeRole,
     schedule: item,
     sortTimeMs: parseTimeMs(timeIso),
+  }
+}
+
+function toTimeRangeStartDisplayItem(item: Schedule): ScheduleDisplayItem {
+  return {
+    effectiveDone: item.done,
+    key: `schedule-${item.id}-start`,
+    rangeRole: 'start',
+    schedule: item,
+    sortTimeMs: parseTimeMs(item.start_at),
   }
 }
 
@@ -329,6 +497,13 @@ export function expandSchedulesForDisplay(options: ExpandOptions): ExpandResult 
         steppers.push(stepper)
       }
     } else {
+      if (
+        item.type === ScheduleTypeEnum.TimeRange &&
+        item.start_at &&
+        matchesStatus(item.done, options.statusFilter)
+      ) {
+        collected.push(toTimeRangeStartDisplayItem(item))
+      }
       const displayItem = toNonRecurringDisplayItem(item)
       if (matchesStatus(displayItem.effectiveDone, options.statusFilter)) {
         collected.push(displayItem)

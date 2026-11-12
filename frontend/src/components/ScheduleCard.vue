@@ -4,7 +4,6 @@ import { ScheduleTypeEnum, type Schedule } from '@/api'
 import { TYPE_LABELS, formatDateTime, formatRecurrenceSummary } from '@/utils/schedule-helpers'
 import type { ScheduleDisplayItem } from '@/utils/schedule-occurrences'
 
-/* oxlint-disable one-var */
 const { entry, busy = false } = defineProps<{
   entry: ScheduleDisplayItem
   busy?: boolean
@@ -17,7 +16,23 @@ const emit = defineEmits<{
 }>()
 
 const item = computed(() => entry.schedule)
-const typeLabel = computed(() => TYPE_LABELS[item.value.type] ?? item.value.type)
+const typeLabel = computed(() => {
+  if (item.value.type === ScheduleTypeEnum.TimeRange) {
+    if (entry.rangeRole === 'start') {
+      return '时段开始'
+    }
+    if (entry.rangeRole === 'end') {
+      return '时段结束'
+    }
+  }
+  return TYPE_LABELS[item.value.type] ?? item.value.type
+})
+const typeBadgeClass = computed(() => {
+  if (item.value.type === ScheduleTypeEnum.TimeRange && entry.rangeRole) {
+    return `type-time_range_${entry.rangeRole}`
+  }
+  return `type-${item.value.type}`
+})
 
 function formatOccurrenceText(entryItem: ScheduleDisplayItem): string {
   if (entryItem.occurrenceIndex) {
@@ -46,9 +61,14 @@ const secondaryRuleText = computed(() => {
 </script>
 
 <template>
-  <article class="schedule-card" :class="{ 'is-done': entry.effectiveDone }">
+  <article
+    class="schedule-card"
+    :class="{ 'is-done': entry.effectiveDone }"
+    :data-entry-key="entry.key"
+  >
     <div class="card-status-col">
       <button
+        v-if="entry.rangeRole !== 'start'"
         type="button"
         class="check-btn"
         :class="{ checked: entry.effectiveDone }"
@@ -58,16 +78,17 @@ const secondaryRuleText = computed(() => {
       >
         <span v-if="entry.effectiveDone" class="check-icon">✓</span>
       </button>
+      <span v-else class="auto-check-dot" title="时段开始时间点不可标记为完成"></span>
+      <span class="badge" :class="typeBadgeClass">{{ typeLabel }}</span>
     </div>
 
     <div class="card-main">
       <div class="card-header">
-        <span class="badge" :class="`type-${item.type}`">{{ typeLabel }}</span>
         <h3 class="card-title">{{ item.title }}</h3>
       </div>
 
-      <p class="card-time">{{ primaryTimeText }}</p>
       <p v-if="item.description" class="card-desc">{{ item.description }}</p>
+      <p class="card-time">{{ primaryTimeText }}</p>
 
       <div class="card-meta">
         <span>优先级 {{ item.priority }}</span>
@@ -122,6 +143,12 @@ const secondaryRuleText = computed(() => {
 }
 
 .card-status-col {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.45rem;
+  width: 40px;
+  flex-shrink: 0;
   padding-top: 0.15rem;
 }
 
@@ -203,10 +230,12 @@ const secondaryRuleText = computed(() => {
 .badge {
   display: inline-flex;
   align-items: center;
-  padding: 0.12rem 0.55rem;
+  justify-content: center;
+  padding: 0.12rem 0.5rem;
   border-radius: 999px;
-  font-size: 0.75rem;
+  font-size: 0.72rem;
   font-weight: 500;
+  white-space: nowrap;
 }
 
 .type-one_time {
@@ -214,9 +243,15 @@ const secondaryRuleText = computed(() => {
   color: #2563eb;
 }
 
-.type-time_range {
-  background: rgba(139, 92, 246, 0.12);
+.type-time_range,
+.type-time_range_end {
+  background: rgba(139, 92, 246, 0.14);
   color: #7c3aed;
+}
+
+.type-time_range_start {
+  background: rgba(245, 158, 11, 0.14);
+  color: #d97706;
 }
 
 .type-recurring {
