@@ -140,11 +140,6 @@ onBeforeUnmount(() => {
   <main class="schedule-page">
     <!-- 顶部标题栏 -->
     <header class="page-header">
-      <div class="stat-card">
-        <span class="stat-label">待办事项</span>
-        <strong class="stat-value text-primary">{{ store.stats.pending }}</strong>
-      </div>
-
       <div class="header-actions">
         <button
           type="button"

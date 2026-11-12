@@ -18,7 +18,6 @@ export interface ExpandOptions {
   sortMode: SortMode
   statusFilter: StatusFilter
   visibleLimit: number
-  completedOccurrences: ReadonlySet<string>
   nowMs?: number | undefined
 }
 
@@ -27,8 +26,8 @@ export interface ExpandResult {
   hasMore: boolean
 }
 
-export function makeOccurrenceKey(scheduleId: number, occurrenceIso: string): string {
-  return `${scheduleId}@${occurrenceIso}`
+function getCompletedIndexSet(rec: Recurrence | null | undefined): ReadonlySet<number> {
+  return new Set<number>(rec?.completed_indices)
 }
 
 function getDaysInMonth(year: number, monthZeroBased: number): number {
@@ -163,11 +162,7 @@ function toNonRecurringDisplayItem(item: Schedule): ScheduleDisplayItem {
   }
 }
 
-function findNextRecurringItem(
-  item: Schedule,
-  nowMs: number,
-  completedOccurrences: ReadonlySet<string>,
-): ScheduleDisplayItem {
+function findNextRecurringItem(item: Schedule, nowMs: number): ScheduleDisplayItem {
   const rec = item.recurrence
   if (!rec) {
     return {
@@ -177,6 +172,7 @@ function findNextRecurringItem(
       sortTimeMs: Number.MAX_SAFE_INTEGER,
     }
   }
+  const completedSet = getCompletedIndexSet(rec)
   const nowMinuteMs = Math.floor(nowMs / 60_000) * 60_000
   let step = 0
   let lastValidDate: Date | undefined = undefined
@@ -188,12 +184,12 @@ function findNextRecurringItem(
     }
     lastValidDate = occDate
     if (occDate.getTime() >= nowMinuteMs) {
-      const occIso = occDate.toISOString()
+      const occIndex = step + 1
       return {
-        effectiveDone: completedOccurrences.has(makeOccurrenceKey(item.id, occIso)),
-        key: `schedule-${item.id}-next-${step + 1}`,
-        occurrenceIndex: step + 1,
-        occurrenceIso: occIso,
+        effectiveDone: completedSet.has(occIndex),
+        key: `schedule-${item.id}-next-${occIndex}`,
+        occurrenceIndex: occIndex,
+        occurrenceIso: occDate.toISOString(),
         schedule: item,
         sortTimeMs: occDate.getTime(),
       }
@@ -204,11 +200,12 @@ function findNextRecurringItem(
   if (lastValidDate) {
     fallbackMs = lastValidDate.getTime()
   }
+  const fallbackIndex = Math.max(1, step)
   const fallbackIso = lastValidDate?.toISOString() ?? rec.start_at
   return {
-    effectiveDone: completedOccurrences.has(makeOccurrenceKey(item.id, fallbackIso)),
+    effectiveDone: completedSet.has(fallbackIndex),
     key: `schedule-${item.id}-last`,
-    occurrenceIndex: Math.max(1, step),
+    occurrenceIndex: fallbackIndex,
     occurrenceIso: fallbackIso,
     schedule: item,
     sortTimeMs: fallbackMs,
@@ -237,15 +234,12 @@ export function compareByPriority(left: ScheduleDisplayItem, right: ScheduleDisp
 
 interface RecurringStepper {
   schedule: Schedule
+  completedSet: ReadonlySet<number>
   nextStep: number
   nextItem: ScheduleDisplayItem | undefined
 }
 
-function advanceStepper(
-  stepper: RecurringStepper,
-  statusFilter: StatusFilter,
-  completedOccurrences: ReadonlySet<string>,
-): void {
+function advanceStepper(stepper: RecurringStepper, statusFilter: StatusFilter): void {
   const rec = stepper.schedule.recurrence
   if (!rec) {
     stepper.nextItem = undefined
@@ -261,14 +255,14 @@ function advanceStepper(
       stepper.nextItem = undefined
       return
     }
-    const occIso = occDate.toISOString()
-    const effectiveDone = completedOccurrences.has(makeOccurrenceKey(stepper.schedule.id, occIso))
+    const occIndex = step + 1
+    const effectiveDone = stepper.completedSet.has(occIndex)
     if (matchesStatus(effectiveDone, statusFilter)) {
       stepper.nextItem = {
         effectiveDone,
-        key: `schedule-${stepper.schedule.id}-occ-${step + 1}`,
-        occurrenceIndex: step + 1,
-        occurrenceIso: occIso,
+        key: `schedule-${stepper.schedule.id}-occ-${occIndex}`,
+        occurrenceIndex: occIndex,
+        occurrenceIso: occDate.toISOString(),
         schedule: stepper.schedule,
         sortTimeMs: occDate.getTime(),
       }
@@ -291,13 +285,9 @@ function pickEarliestStepper(steppers: RecurringStepper[]): RecurringStepper | u
   return chosen
 }
 
-function toPriorityModeItem(
-  item: Schedule,
-  nowMs: number,
-  completedOccurrences: ReadonlySet<string>,
-): ScheduleDisplayItem {
+function toPriorityModeItem(item: Schedule, nowMs: number): ScheduleDisplayItem {
   if (item.type === ScheduleTypeEnum.Recurring) {
-    return findNextRecurringItem(item, nowMs, completedOccurrences)
+    return findNextRecurringItem(item, nowMs)
   }
   return toNonRecurringDisplayItem(item)
 }
@@ -305,7 +295,7 @@ function toPriorityModeItem(
 function expandForPriorityMode(options: ExpandOptions, nowMs: number): ExpandResult {
   const result: ScheduleDisplayItem[] = []
   for (const item of options.schedules) {
-    const displayItem = toPriorityModeItem(item, nowMs, options.completedOccurrences)
+    const displayItem = toPriorityModeItem(item, nowMs)
     if (matchesStatus(displayItem.effectiveDone, options.statusFilter)) {
       result.push(displayItem)
     }
@@ -328,8 +318,13 @@ export function expandSchedulesForDisplay(options: ExpandOptions): ExpandResult 
 
   for (const item of options.schedules) {
     if (item.type === ScheduleTypeEnum.Recurring) {
-      const stepper: RecurringStepper = { nextItem: undefined, nextStep: 0, schedule: item }
-      advanceStepper(stepper, options.statusFilter, options.completedOccurrences)
+      const stepper: RecurringStepper = {
+        completedSet: getCompletedIndexSet(item.recurrence),
+        nextItem: undefined,
+        nextStep: 0,
+        schedule: item,
+      }
+      advanceStepper(stepper, options.statusFilter)
       if (stepper.nextItem) {
         steppers.push(stepper)
       }
@@ -350,7 +345,7 @@ export function expandSchedulesForDisplay(options: ExpandOptions): ExpandResult 
     }
     collected.push(earliest.nextItem)
     generatedRecurring += 1
-    advanceStepper(earliest, options.statusFilter, options.completedOccurrences)
+    advanceStepper(earliest, options.statusFilter)
   }
 
   collected.sort(compareByTime)

@@ -28,6 +28,7 @@ export interface ScheduleFormState {
   dayOfMonth: number
   month: number
   timezone: string
+  completedIndices: number[]
 }
 
 export const TYPE_LABELS: Record<ScheduleTypeEnum, string> = {
@@ -185,6 +186,7 @@ export function createDefaultFormState(): ScheduleFormState {
     defaultTz = new Intl.DateTimeFormat().resolvedOptions().timeZone || 'Asia/Shanghai'
 
   return {
+    completedIndices: [],
     count: 10,
     dayOfMonth: now.getDate(),
     dayOfWeek: now.getDay(),
@@ -229,6 +231,7 @@ export function scheduleToFormState(item: Schedule): ScheduleFormState {
 
   return {
     ...defaults,
+    completedIndices: [...(rec?.completed_indices ?? [])],
     count: positiveOrDefault(rec?.count, 10),
     dayOfMonth: positiveOrDefault(rec?.day_of_month, defaults.dayOfMonth),
     dayOfWeek: rec?.day_of_week ?? defaults.dayOfWeek,
@@ -321,6 +324,9 @@ function buildRecurrenceObject(form: ScheduleFormState): Recurrence {
   } else if (form.frequency === RecurrenceFrequencyEnum.Yearly) {
     rec.month = Math.min(12, Math.max(1, Math.trunc(form.month)))
   }
+  if (form.completedIndices.length > 0) {
+    rec.completed_indices = [...form.completedIndices]
+  }
   return rec
 }
 
@@ -366,6 +372,41 @@ export function buildToggleDonePayload(item: Schedule, nextDone: boolean): Updat
     happen_time: item.happen_time,
     priority: item.priority,
     recurrence: item.recurrence,
+    start_at: item.start_at,
+    title: item.title,
+    type: item.type,
+  }
+}
+
+function toggleIndexList(indices: number[] | undefined, target: number): number[] {
+  const nextSet = new Set<number>(indices)
+  if (nextSet.has(target)) {
+    nextSet.delete(target)
+  } else {
+    nextSet.add(target)
+  }
+  return [...nextSet].toSorted((left, right) => left - right)
+}
+
+export function buildToggleRecurringOccurrencePayload(
+  item: Schedule,
+  occurrenceIndex: number,
+): UpdateScheduleRequest {
+  const currentRec = item.recurrence
+  let nextRec: Recurrence | undefined = undefined
+  if (currentRec) {
+    nextRec = {
+      ...currentRec,
+      completed_indices: toggleIndexList(currentRec.completed_indices, occurrenceIndex),
+    }
+  }
+  return {
+    description: item.description,
+    done: item.done,
+    end_at: item.end_at,
+    happen_time: item.happen_time,
+    priority: item.priority,
+    recurrence: nextRec,
     start_at: item.start_at,
     title: item.title,
     type: item.type,

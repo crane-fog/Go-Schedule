@@ -14,10 +14,12 @@ import {
   fetchSchedules,
   updateScheduleItem,
 } from '@/api/client'
-import { buildToggleDonePayload } from '@/utils/schedule-helpers'
+import {
+  buildToggleDonePayload,
+  buildToggleRecurringOccurrencePayload,
+} from '@/utils/schedule-helpers'
 import {
   expandSchedulesForDisplay,
-  makeOccurrenceKey,
   type ScheduleDisplayItem,
   type SortMode,
   type StatusFilter,
@@ -27,31 +29,6 @@ export type TypeFilter = 'all' | ScheduleTypeEnum
 
 const INITIAL_LIMIT = 25
 const PAGE_STEP = 20
-const OCCURRENCE_STORAGE_KEY = 'go_schedule_completed_occurrences_v1'
-
-function loadCompletedFromStorage(): Set<string> {
-  try {
-    const raw = globalThis.localStorage?.getItem(OCCURRENCE_STORAGE_KEY)
-    if (!raw) {
-      return new Set<string>()
-    }
-    const parsed: unknown = JSON.parse(raw)
-    if (Array.isArray(parsed)) {
-      return new Set<string>(parsed.filter((val): val is string => typeof val === 'string'))
-    }
-  } catch {
-    return new Set<string>()
-  }
-  return new Set<string>()
-}
-
-function saveCompletedToStorage(set: ReadonlySet<string>): void {
-  try {
-    globalThis.localStorage?.setItem(OCCURRENCE_STORAGE_KEY, JSON.stringify([...set]))
-  } catch {
-    // ignore storage errors
-  }
-}
 
 function matchesTypeAndKeyword(item: Schedule, type: TypeFilter, keyword: string): boolean {
   if (type !== 'all' && item.type !== type) {
@@ -74,7 +51,6 @@ export const useScheduleStore = defineStore('schedule', () => {
   const typeFilter = ref<TypeFilter>('all')
   const searchQuery = ref('')
   const visibleLimit = ref(INITIAL_LIMIT)
-  const completedOccurrences = ref<Set<string>>(loadCompletedFromStorage())
 
   watch([sortMode, statusFilter, typeFilter, searchQuery], () => {
     visibleLimit.value = INITIAL_LIMIT
@@ -87,7 +63,6 @@ export const useScheduleStore = defineStore('schedule', () => {
 
   const expandResult = computed(() =>
     expandSchedulesForDisplay({
-      completedOccurrences: completedOccurrences.value,
       schedules: baseMatchedSchedules.value,
       sortMode: sortMode.value,
       statusFilter: statusFilter.value,
@@ -115,30 +90,6 @@ export const useScheduleStore = defineStore('schedule', () => {
     if (hasMoreInfinite.value) {
       visibleLimit.value += PAGE_STEP
     }
-  }
-
-  function toggleRecurringOccurrence(scheduleId: number, occurrenceIso: string): void {
-    const key = makeOccurrenceKey(scheduleId, occurrenceIso)
-    const nextSet = new Set(completedOccurrences.value)
-    if (nextSet.has(key)) {
-      nextSet.delete(key)
-    } else {
-      nextSet.add(key)
-    }
-    completedOccurrences.value = nextSet
-    saveCompletedToStorage(nextSet)
-  }
-
-  function clearScheduleOccurrences(scheduleId: number): void {
-    const prefix = `${scheduleId}@`
-    const nextSet = new Set<string>()
-    for (const key of completedOccurrences.value) {
-      if (!key.startsWith(prefix)) {
-        nextSet.add(key)
-      }
-    }
-    completedOccurrences.value = nextSet
-    saveCompletedToStorage(nextSet)
   }
 
   async function loadSchedules(): Promise<void> {
@@ -174,10 +125,11 @@ export const useScheduleStore = defineStore('schedule', () => {
   }
 
   async function toggleDone(entry: ScheduleDisplayItem): Promise<void> {
-    const { schedule, occurrenceIso } = entry
+    const { schedule, occurrenceIndex } = entry
     if (schedule.type === ScheduleTypeEnum.Recurring) {
-      if (occurrenceIso) {
-        toggleRecurringOccurrence(schedule.id, occurrenceIso)
+      if (occurrenceIndex !== undefined) {
+        const payload = buildToggleRecurringOccurrencePayload(schedule, occurrenceIndex)
+        await editSchedule(schedule.id, payload)
       }
       return
     }
@@ -189,7 +141,6 @@ export const useScheduleStore = defineStore('schedule', () => {
     submitting.value = true
     try {
       await deleteScheduleItem(id)
-      clearScheduleOccurrences(id)
       await loadSchedules()
     } finally {
       submitting.value = false
@@ -198,7 +149,6 @@ export const useScheduleStore = defineStore('schedule', () => {
 
   return {
     addSchedule,
-    completedOccurrences,
     displayedSchedules,
     editSchedule,
     error,

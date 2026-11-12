@@ -93,6 +93,11 @@ func validateRecurrence(r *openapi.Recurrence) error {
 	if r.Month < 0 || r.Month > 12 {
 		return badRequest("recurrence.month 必须在 1 到 12 之间（0 表示未设置）")
 	}
+	for _, idx := range r.CompletedIndices {
+		if idx < 1 {
+			return badRequest("recurrence.completed_indices 中的序号必须大于等于 1")
+		}
+	}
 	return nil
 }
 
