@@ -111,17 +111,6 @@ func normalizeTypeFields(typ string, happenTime, startAt, endAt **time.Time, rec
 	}
 }
 
-// 按 one_time 的 happen_time 判断是否已完成。
-func isOneTimeDone(happenTime *time.Time, now time.Time) bool {
-	return happenTime != nil && !happenTime.After(now)
-}
-
-func applyDerivedDone(schedule *openapi.Schedule, now time.Time) {
-	if schedule.Type == typeOneTime {
-		schedule.Done = isOneTimeDone(schedule.HappenTime, now)
-	}
-}
-
 // 按未完成在前、开始时间升序、优先级降序排序。
 func sortSchedules(list []openapi.Schedule) {
 	sort.SliceStable(list, func(i, j int) bool {

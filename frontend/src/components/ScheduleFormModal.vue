@@ -102,6 +102,16 @@ function handleSubmit(): void {
           </div>
 
           <div class="form-group">
+            <label class="form-label" for="schedule-description">描述</label>
+            <textarea
+              id="schedule-description"
+              v-model="form.description"
+              rows="2"
+              class="form-input form-textarea"
+            />
+          </div>
+
+          <div class="form-group">
             <label class="form-label">类型 *</label>
             <div class="type-selector">
               <button
@@ -141,14 +151,6 @@ function handleSubmit(): void {
                   class="form-input priority-num-input"
                 />
               </div>
-            </div>
-
-            <div v-if="isEditing && form.type === ScheduleTypeEnum.TimeRange" class="form-group">
-              <label class="form-label">当前状态</label>
-              <label class="checkbox-row">
-                <input v-model="form.done" type="checkbox" />
-                <span>标记为已完成</span>
-              </label>
             </div>
           </div>
 
@@ -434,6 +436,11 @@ function handleSubmit(): void {
 
 .form-input:focus {
   border-color: var(--primary-color);
+}
+
+.form-textarea {
+  resize: vertical;
+  font-family: inherit;
 }
 
 .form-help {

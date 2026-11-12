@@ -1,8 +1,6 @@
 package schedule
 
 import (
-	"time"
-
 	"schedule/internal/openapi"
 )
 
@@ -20,10 +18,6 @@ func (s *ScheduleService) GetSchedules() ([]openapi.Schedule, error) {
 		return nil, err
 	}
 
-	now := time.Now()
-	for i := range list {
-		applyDerivedDone(&list[i], now)
-	}
 	sortSchedules(list)
 	return list, nil
 }
@@ -38,7 +32,6 @@ func (s *ScheduleService) CreateSchedule(req *openapi.CreateScheduleRequest) (*o
 	if err != nil {
 		return nil, err
 	}
-	applyDerivedDone(result, time.Now())
 	return result, nil
 }
 
@@ -50,15 +43,11 @@ func (s *ScheduleService) UpdateSchedule(id int64, req *openapi.UpdateScheduleRe
 		return nil, err
 	}
 	normalizeTypeFields(req.Type, &req.HappenTime, &req.StartAt, &req.EndAt, &req.Recurrence)
-	if req.Type == typeOneTime {
-		req.Done = isOneTimeDone(req.HappenTime, time.Now())
-	}
 
 	result, err := s.store.UpdateSchedule(id, req)
 	if err != nil {
 		return nil, mapStoreError(err)
 	}
-	applyDerivedDone(result, time.Now())
 	return result, nil
 }
 

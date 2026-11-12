@@ -17,7 +17,6 @@ const emit = defineEmits<{
 }>()
 
 const item = computed(() => entry.schedule)
-const isOneTime = computed(() => item.value.type === ScheduleTypeEnum.OneTime)
 const typeLabel = computed(() => TYPE_LABELS[item.value.type] ?? item.value.type)
 
 function formatOccurrenceText(entryItem: ScheduleDisplayItem): string {
@@ -50,7 +49,6 @@ const secondaryRuleText = computed(() => {
   <article class="schedule-card" :class="{ 'is-done': entry.effectiveDone }">
     <div class="card-status-col">
       <button
-        v-if="!isOneTime"
         type="button"
         class="check-btn"
         :class="{ checked: entry.effectiveDone }"
@@ -60,14 +58,6 @@ const secondaryRuleText = computed(() => {
       >
         <span v-if="entry.effectiveDone" class="check-icon">✓</span>
       </button>
-      <span
-        v-else
-        class="auto-check-dot"
-        :class="{ checked: entry.effectiveDone }"
-        :title="entry.effectiveDone ? '单次日程已到时间，自动视为完成' : '单次日程尚未到时间'"
-      >
-        {{ entry.effectiveDone ? '✓' : '🕒' }}
-      </span>
     </div>
 
     <div class="card-main">
@@ -77,6 +67,7 @@ const secondaryRuleText = computed(() => {
       </div>
 
       <p class="card-time">{{ primaryTimeText }}</p>
+      <p v-if="item.description" class="card-desc">{{ item.description }}</p>
 
       <div class="card-meta">
         <span>优先级 {{ item.priority }}</span>
@@ -263,11 +254,17 @@ const secondaryRuleText = computed(() => {
   color: #059669;
 }
 
+.card-desc,
 .card-time {
   font-size: 0.92rem;
   font-weight: 500;
   color: var(--text-regular);
   margin-bottom: 0.25rem;
+}
+
+.card-desc {
+  white-space: pre-wrap;
+  word-break: break-word;
 }
 
 .card-rule {

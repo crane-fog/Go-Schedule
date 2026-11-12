@@ -47,14 +47,15 @@ func (store *Store) GetSchedules() ([]openapi.Schedule, error) {
 
 func (store *Store) CreateSchedule(req *openapi.CreateScheduleRequest) (*openapi.Schedule, error) {
 	s := Schedules{Schedule: openapi.Schedule{
-		Title:      req.Title,
-		Type:       req.Type,
-		Priority:   req.Priority,
-		Done:       false,
-		HappenTime: req.HappenTime,
-		StartAt:    req.StartAt,
-		EndAt:      req.EndAt,
-		Recurrence: req.Recurrence,
+		Title:       req.Title,
+		Description: req.Description,
+		Type:        req.Type,
+		Priority:    req.Priority,
+		Done:        false,
+		HappenTime:  req.HappenTime,
+		StartAt:     req.StartAt,
+		EndAt:       req.EndAt,
+		Recurrence:  req.Recurrence,
 	}}
 	if err := store.db.Create(&s).Error; err != nil {
 		return nil, err
@@ -71,6 +72,7 @@ func (store *Store) UpdateSchedule(id int64, req *openapi.UpdateScheduleRequest)
 		return nil, err
 	}
 	s.Title = req.Title
+	s.Description = req.Description
 	s.Type = req.Type
 	s.Priority = req.Priority
 	s.Done = req.Done

@@ -175,9 +175,6 @@ export const useScheduleStore = defineStore('schedule', () => {
 
   async function toggleDone(entry: ScheduleDisplayItem): Promise<void> {
     const { schedule, occurrenceIso } = entry
-    if (schedule.type === ScheduleTypeEnum.OneTime) {
-      return
-    }
     if (schedule.type === ScheduleTypeEnum.Recurring) {
       if (occurrenceIso) {
         toggleRecurringOccurrence(schedule.id, occurrenceIso)

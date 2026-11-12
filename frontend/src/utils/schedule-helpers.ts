@@ -11,6 +11,7 @@ export type RecurrenceEndMode = 'never' | 'until' | 'count'
 
 export interface ScheduleFormState {
   title: string
+  description: string
   type: ScheduleTypeEnum
   priority: number
   done: boolean
@@ -187,6 +188,7 @@ export function createDefaultFormState(): ScheduleFormState {
     count: 10,
     dayOfMonth: now.getDate(),
     dayOfWeek: now.getDay(),
+    description: '',
     done: false,
     endAtLocal: dateToLocalInput(nextHour),
     endMode: 'never',
@@ -230,6 +232,7 @@ export function scheduleToFormState(item: Schedule): ScheduleFormState {
     count: positiveOrDefault(rec?.count, 10),
     dayOfMonth: positiveOrDefault(rec?.day_of_month, defaults.dayOfMonth),
     dayOfWeek: rec?.day_of_week ?? defaults.dayOfWeek,
+    description: item.description ?? '',
     done: item.done,
     endAtLocal: isoToLocalInput(item.end_at) || defaults.endAtLocal,
     endMode: detectEndMode(rec),
@@ -322,11 +325,13 @@ function buildRecurrenceObject(form: ScheduleFormState): Recurrence {
 }
 
 export function buildCreatePayload(form: ScheduleFormState): CreateScheduleRequest {
-  const base: CreateScheduleRequest = {
-    priority: Math.trunc(form.priority || 0),
-    title: form.title.trim(),
-    type: form.type,
-  }
+  const trimmedDesc = form.description.trim(),
+    base: CreateScheduleRequest = {
+      description: trimmedDesc || undefined,
+      priority: Math.trunc(form.priority || 0),
+      title: form.title.trim(),
+      type: form.type,
+    }
   if (form.type === ScheduleTypeEnum.OneTime) {
     base.happen_time = localInputToIso(form.happenTimeLocal)
   } else if (form.type === ScheduleTypeEnum.TimeRange) {
@@ -341,7 +346,8 @@ export function buildCreatePayload(form: ScheduleFormState): CreateScheduleReque
 export function buildUpdatePayload(form: ScheduleFormState): UpdateScheduleRequest {
   const created = buildCreatePayload(form)
   return {
-    done: form.type === ScheduleTypeEnum.TimeRange && form.done,
+    description: form.description.trim(),
+    done: form.type !== ScheduleTypeEnum.Recurring && form.done,
     end_at: created.end_at,
     happen_time: created.happen_time,
     priority: created.priority ?? 0,
@@ -354,6 +360,7 @@ export function buildUpdatePayload(form: ScheduleFormState): UpdateScheduleReque
 
 export function buildToggleDonePayload(item: Schedule, nextDone: boolean): UpdateScheduleRequest {
   return {
+    description: item.description,
     done: nextDone,
     end_at: item.end_at,
     happen_time: item.happen_time,
