@@ -2,7 +2,7 @@
 /* eslint-disable */
 /**
  * Go-Schedule API
- * 练习用日程服务 API。  统一响应约定： - 所有接口的 HTTP 状态码固定为 `200`； - 业务状态由响应 JSON 中的 `code` 字段表示：`200` 成功、`400` 参数错误、`404` 资源不存在、`500` 服务器内部错误； - 响应体统一为 `{\"code\": xxx, \"data\": ...}`； - 成功时 `data` 为业务数据，失败时 `data` 为 `{\"message\": \"...\"}`； - 列表按规则排序：未完成在前、开始时间升序、开始时间相同时优先级降序。  日程使用统一的 `Schedule` 结构，由 `type` 决定哪些字段生效： - `one_time`：只使用 `happen_time`，过期后自动视为已完成； - `time_range`：只使用 `start_at` / `end_at`，两个时间都允许为 `null`； - `recurring`：只使用 `recurrence`。 当前类型不使用的字段统一返回 `null`。 
+ * 练习用日程服务 API。  统一响应约定： - 所有接口的 HTTP 状态码固定为 `200`； - 业务状态由响应 JSON 中的 `code` 字段表示：`200` 成功、`400` 参数错误、`404` 资源不存在、`500` 服务器内部错误； - 响应体统一为 `{\"code\": xxx, \"data\": ...}`； - 成功时 `data` 为业务数据，失败时 `data` 为 `{\"message\": \"...\"}`； - 列表按规则排序：未完成在前、开始时间升序、开始时间相同时优先级降序。  日程使用统一的 `Schedule` 结构，由 `type` 决定哪些字段生效： - `one_time`：只使用 `happen_time`； - `time_range`：只使用 `start_at` / `end_at`，两个时间都允许为 `null`； - `recurring`：只使用 `recurrence`。 当前类型不使用的字段统一返回 `null`。 
  *
  * The version of the OpenAPI document: 0.1.0
  * 
@@ -30,6 +30,10 @@ export type CreateSchedule200Response = ErrorResponse | ScheduleResponse;
 
 export interface CreateScheduleRequest {
     'title': string;
+    /**
+     * 日程描述（可选）
+     */
+    'description'?: string;
     /**
      * 日程类型，决定需要提供哪些字段
      */
@@ -156,12 +160,16 @@ export interface Schedule {
     'id': number;
     'title': string;
     /**
+     * 日程描述（可选）
+     */
+    'description'?: string;
+    /**
      * 日程类型： - `one_time`：只使用 `happen_time` - `time_range`：只使用 `start_at` / `end_at` - `recurring`：只使用 `recurrence` 
      */
     'type': ScheduleTypeEnum;
     'priority': number;
     /**
-     * 是否已完成；`one_time` 类型由服务端根据 `happen_time` 自动计算
+     * 是否已完成
      */
     'done': boolean;
     'created_at': string;
@@ -216,12 +224,16 @@ export type ScheduleResponseCodeEnum = typeof ScheduleResponseCodeEnum[keyof typ
 export interface UpdateScheduleRequest {
     'title': string;
     /**
+     * 日程描述（可选）
+     */
+    'description'?: string;
+    /**
      * 日程类型，决定需要提供哪些字段
      */
     'type': UpdateScheduleRequestTypeEnum;
     'priority': number;
     /**
-     * 仅 `time_range` / `recurring` 使用；`one_time` 由服务端自动计算
+     * 是否已完成
      */
     'done'?: boolean;
     /**
