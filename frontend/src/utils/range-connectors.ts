@@ -1,5 +1,5 @@
 import { ScheduleTypeEnum } from '@/api'
-import type { ScheduleDisplayItem } from './schedule-occurrences'
+import type { ScheduleDisplayItem } from '@/types/schedule'
 
 export interface RangePairSpec {
   scheduleId: number
@@ -38,9 +38,17 @@ const DISTINCT_PALETTE = [
   '#dc2626',
 ] as const
 
-export const LANE_STEP_PX = 14
-export const BASE_OFFSET_PX = 40
+const LANE_STEP_PX = 14
+const BASE_OFFSET_PX = 40
 export const CARD_GAP_PX = 4
+const GUTTER_PADDING_PX = 8
+
+export function computeConnectorGutterWidth(pairCount: number, maxLane: number): number {
+  if (pairCount === 0) {
+    return 0
+  }
+  return BASE_OFFSET_PX + maxLane * LANE_STEP_PX + GUTTER_PADDING_PX
+}
 
 function pickDistinctColor(colorOrder: number): string {
   if (colorOrder < DISTINCT_PALETTE.length) {
@@ -81,52 +89,31 @@ export function buildRangePairSpecs(entries: ScheduleDisplayItem[]): {
     }
   }
 
-  const rawPairs: {
-    done: boolean
-    endIdx: number
-    endKey: string | undefined
-    scheduleId: number
-    startIdx: number
-    startKey: string
-  }[] = []
-
-  for (const [scheduleId, startInfo] of startMap) {
-    const endInfo = endMap.get(scheduleId)
-    let endIdx = entries.length
-    if (endInfo) {
-      endIdx = endInfo.idx
-    }
-    rawPairs.push({
-      done: startInfo.item.effectiveDone,
-      endIdx,
-      endKey: endInfo?.item.key,
-      scheduleId,
-      startIdx: startInfo.idx,
-      startKey: startInfo.item.key,
+  const rawPairs = [...startMap.entries()]
+    .map(([scheduleId, startInfo]) => {
+      const endInfo = endMap.get(scheduleId)
+      return {
+        done: startInfo.item.effectiveDone,
+        endIdx: endInfo?.idx ?? entries.length,
+        endKey: endInfo?.item.key,
+        scheduleId,
+        startIdx: startInfo.idx,
+        startKey: startInfo.item.key,
+      }
     })
-  }
-
-  rawPairs.sort((left, right) => left.startIdx - right.startIdx)
+    .toSorted((left, right) => left.startIdx - right.startIdx)
 
   const laneLastEnd: number[] = []
-  const pairs: RangePairSpec[] = []
-
-  for (let idx = 0; idx < rawPairs.length; idx += 1) {
-    const raw = rawPairs[idx]
-    if (raw) {
-      const lane = assignLane(laneLastEnd, raw.startIdx, raw.endIdx)
-      pairs.push({
-        color: pickDistinctColor(idx),
-        done: raw.done,
-        endIdx: raw.endIdx,
-        endKey: raw.endKey,
-        lane,
-        scheduleId: raw.scheduleId,
-        startIdx: raw.startIdx,
-        startKey: raw.startKey,
-      })
-    }
-  }
+  const pairs: RangePairSpec[] = rawPairs.map((raw, idx) => ({
+    color: pickDistinctColor(idx),
+    done: raw.done,
+    endIdx: raw.endIdx,
+    endKey: raw.endKey,
+    lane: assignLane(laneLastEnd, raw.startIdx, raw.endIdx),
+    scheduleId: raw.scheduleId,
+    startIdx: raw.startIdx,
+    startKey: raw.startKey,
+  }))
 
   return {
     maxLane: Math.max(0, laneLastEnd.length - 1),

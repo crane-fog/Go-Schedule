@@ -2,11 +2,14 @@ import {
   Configuration,
   SchedulesApi,
   type CreateScheduleRequest,
+  type ErrorResponse,
   type Schedule,
   type UpdateScheduleRequest,
 } from './index'
 
-export const schedulesApi = new SchedulesApi(
+type ApiEnvelope<TData> = { code: 200; data: TData } | ErrorResponse
+
+const schedulesApi = new SchedulesApi(
   new Configuration({
     basePath: (import.meta.env.VITE_API_BASE_URL as string | undefined) ?? '',
   }),
@@ -19,60 +22,47 @@ export function extractErrorMessage(err: unknown, fallback: string): string {
   return fallback
 }
 
-export async function fetchSchedules(): Promise<Schedule[]> {
+async function requestApi<TData>(
+  request: () => Promise<{ data: ApiEnvelope<TData> }>,
+  fallbackMessage: string,
+): Promise<TData> {
   try {
-    const response = await schedulesApi.listSchedules()
-    if (response.data.code === 200) {
-      return response.data.data ?? []
+    const { data: body } = await request()
+    if (body.code === 200) {
+      return body.data
     }
-    throw new Error(response.data.data.message || '获取日程列表失败')
+    throw new Error(body.data.message || fallbackMessage)
   } catch (err) {
-    throw new Error(extractErrorMessage(err, '获取日程列表失败，请检查后端服务是否已启动'), {
-      cause: err,
-    })
+    throw new Error(extractErrorMessage(err, fallbackMessage), { cause: err })
   }
 }
 
+export async function fetchSchedules(): Promise<Schedule[]> {
+  const data = await requestApi(
+    () => schedulesApi.listSchedules(),
+    '获取日程列表失败，请检查后端服务是否已启动',
+  )
+  return data ?? []
+}
+
 export async function createScheduleItem(req: CreateScheduleRequest): Promise<Schedule> {
-  try {
-    const response = await schedulesApi.createSchedule({
-      createScheduleRequest: req,
-    })
-    if (response.data.code === 200) {
-      return response.data.data
-    }
-    throw new Error(response.data.data.message || '创建日程失败')
-  } catch (err) {
-    throw new Error(extractErrorMessage(err, '创建日程失败'), { cause: err })
-  }
+  return requestApi(
+    () => schedulesApi.createSchedule({ createScheduleRequest: req }),
+    '创建日程失败',
+  )
 }
 
 export async function updateScheduleItem(
   id: number,
   req: UpdateScheduleRequest,
 ): Promise<Schedule> {
-  try {
-    const response = await schedulesApi.updateSchedule({
-      id,
-      updateScheduleRequest: req,
-    })
-    if (response.data.code === 200) {
-      return response.data.data
-    }
-    throw new Error(response.data.data.message || '更新日程失败')
-  } catch (err) {
-    throw new Error(extractErrorMessage(err, '更新日程失败'), { cause: err })
-  }
+  return requestApi(
+    () => schedulesApi.updateSchedule({ id, updateScheduleRequest: req }),
+    '更新日程失败',
+  )
 }
 
 export async function deleteScheduleItem(id: number): Promise<number> {
-  try {
-    const response = await schedulesApi.deleteSchedule({ id })
-    if (response.data.code === 200) {
-      return response.data.data.id
-    }
-    throw new Error(response.data.data.message || '删除日程失败')
-  } catch (err) {
-    throw new Error(extractErrorMessage(err, '删除日程失败'), { cause: err })
-  }
+  const data = await requestApi(() => schedulesApi.deleteSchedule({ id }), '删除日程失败')
+  return data.id
 }

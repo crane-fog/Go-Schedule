@@ -1,8 +1,13 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { ScheduleTypeEnum, type Schedule } from '@/api'
-import { TYPE_LABELS, formatDateTime, formatRecurrenceSummary } from '@/utils/schedule-helpers'
-import type { ScheduleDisplayItem } from '@/utils/schedule-occurrences'
+import type { ScheduleDisplayItem } from '@/types/schedule'
+import { formatDateTime } from '@/utils/date-time'
+import {
+  formatRecurrenceSummary,
+  formatSchedulePrimaryTime,
+  formatScheduleTypeBadge,
+} from '@/utils/schedule-format'
 
 const { entry, busy = false } = defineProps<{
   entry: ScheduleDisplayItem
@@ -16,42 +21,8 @@ const emit = defineEmits<{
 }>()
 
 const item = computed(() => entry.schedule)
-const typeLabel = computed(() => {
-  if (item.value.type === ScheduleTypeEnum.TimeRange) {
-    if (entry.rangeRole === 'start') {
-      return '时段开始'
-    }
-    if (entry.rangeRole === 'end') {
-      return '时段结束'
-    }
-  }
-  return TYPE_LABELS[item.value.type] ?? item.value.type
-})
-const typeBadgeClass = computed(() => {
-  if (item.value.type === ScheduleTypeEnum.TimeRange && entry.rangeRole) {
-    return `type-time_range_${entry.rangeRole}`
-  }
-  return `type-${item.value.type}`
-})
-
-function formatOccurrenceText(entryItem: ScheduleDisplayItem): string {
-  if (entryItem.occurrenceIndex) {
-    return `${formatDateTime(entryItem.occurrenceIso)} #${entryItem.occurrenceIndex}`
-  }
-  return formatDateTime(entryItem.occurrenceIso)
-}
-
-const primaryTimeText = computed(() => {
-  const current = item.value
-  if (current.type === ScheduleTypeEnum.OneTime) {
-    return `${formatDateTime(current.happen_time)}`
-  }
-  if (current.type === ScheduleTypeEnum.TimeRange) {
-    return `${formatDateTime(current.start_at)} ~ ${formatDateTime(current.end_at)}`
-  }
-  return formatOccurrenceText(entry)
-})
-
+const typeBadge = computed(() => formatScheduleTypeBadge(item.value, entry.rangeRole))
+const primaryTimeText = computed(() => formatSchedulePrimaryTime(entry))
 const secondaryRuleText = computed(() => {
   if (item.value.type !== ScheduleTypeEnum.Recurring) {
     return ''
@@ -79,7 +50,7 @@ const secondaryRuleText = computed(() => {
         <span v-if="entry.effectiveDone" class="check-icon">✓</span>
       </button>
       <span v-else class="auto-check-dot" title="时段开始时间点不可标记为完成"></span>
-      <span class="badge" :class="typeBadgeClass">{{ typeLabel }}</span>
+      <span class="badge" :class="typeBadge.badgeClass">{{ typeBadge.label }}</span>
     </div>
 
     <div class="card-main">
@@ -94,7 +65,7 @@ const secondaryRuleText = computed(() => {
         <span>优先级 {{ item.priority }}</span>
         <span>ID #{{ item.id }}</span>
         <span>创建于 {{ formatDateTime(item.created_at) }}</span>
-        <span v-if="item.type === 'recurring' && item.recurrence?.timezone">
+        <span v-if="item.type === ScheduleTypeEnum.Recurring && item.recurrence?.timezone">
           时区 {{ item.recurrence.timezone }}
         </span>
         <span v-if="secondaryRuleText">{{ secondaryRuleText }}</span>
@@ -190,12 +161,6 @@ const secondaryRuleText = computed(() => {
   user-select: none;
 }
 
-.auto-check-dot.checked {
-  background: rgba(16, 185, 129, 0.16);
-  color: var(--success-color);
-  font-weight: 700;
-}
-
 .card-main {
   flex: 1;
   min-width: 0;
@@ -219,12 +184,6 @@ const secondaryRuleText = computed(() => {
 .schedule-card.is-done .card-title {
   text-decoration: line-through;
   color: var(--text-secondary);
-}
-
-.badge-group {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.4rem;
 }
 
 .badge {
@@ -259,36 +218,6 @@ const secondaryRuleText = computed(() => {
   color: #0284c7;
 }
 
-.priority-normal {
-  background: var(--surface-muted);
-  color: var(--text-secondary);
-}
-
-.priority-medium {
-  background: rgba(245, 158, 11, 0.14);
-  color: #d97706;
-}
-
-.priority-high {
-  background: rgba(249, 115, 22, 0.15);
-  color: #ea580c;
-}
-
-.priority-urgent {
-  background: rgba(239, 68, 68, 0.15);
-  color: #dc2626;
-}
-
-.status-pending {
-  background: rgba(99, 102, 241, 0.12);
-  color: #4f46e5;
-}
-
-.status-done {
-  background: rgba(16, 185, 129, 0.14);
-  color: #059669;
-}
-
 .card-desc,
 .card-time {
   font-size: 0.92rem;
@@ -302,22 +231,12 @@ const secondaryRuleText = computed(() => {
   word-break: break-word;
 }
 
-.card-rule {
-  font-size: 0.82rem;
-  color: var(--text-secondary);
-  margin-bottom: 0.35rem;
-}
-
 .card-meta {
   display: flex;
   flex-wrap: wrap;
   gap: 0.75rem;
   font-size: 0.78rem;
   color: var(--text-muted);
-}
-
-.auto-hint {
-  color: var(--text-secondary);
 }
 
 .card-actions {

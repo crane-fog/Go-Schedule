@@ -13,18 +13,12 @@ import {
   fetchSchedules,
   updateScheduleItem,
 } from '@/api/client'
+import type { ScheduleDisplayItem, SortMode, StatusFilter, TypeFilter } from '@/types/schedule'
 import {
   buildToggleDonePayload,
   buildToggleRecurringOccurrencePayload,
-} from '@/utils/schedule-helpers'
-import {
-  expandSchedulesForDisplay,
-  type ScheduleDisplayItem,
-  type SortMode,
-  type StatusFilter,
-} from '@/utils/schedule-occurrences'
-
-export type TypeFilter = 'all' | ScheduleTypeEnum
+} from '@/utils/schedule-form'
+import { expandSchedulesForDisplay } from '@/utils/schedule-occurrences'
 
 const INITIAL_LIMIT = 25
 const PAGE_STEP = 20
@@ -72,23 +66,16 @@ export const useScheduleStore = defineStore('schedule', () => {
   const displayedSchedules = computed(() => expandResult.value.items)
   const hasMoreInfinite = computed(() => expandResult.value.hasMore)
 
-  const stats = computed(() => {
-    const list = schedules.value
-    const doneCount = list.filter((item) => item.done).length
-    return {
-      done: doneCount,
-      oneTime: list.filter((item) => item.type === ScheduleTypeEnum.OneTime).length,
-      pending: list.length - doneCount,
-      recurring: list.filter((item) => item.type === ScheduleTypeEnum.Recurring).length,
-      timeRange: list.filter((item) => item.type === ScheduleTypeEnum.TimeRange).length,
-      total: list.length,
-    }
-  })
-
   function loadMoreOccurrences(): void {
     if (hasMoreInfinite.value) {
       visibleLimit.value += PAGE_STEP
     }
+  }
+
+  function resetFilters(): void {
+    statusFilter.value = 'all'
+    typeFilter.value = 'all'
+    searchQuery.value = ''
   }
 
   async function loadSchedules(): Promise<void> {
@@ -103,50 +90,50 @@ export const useScheduleStore = defineStore('schedule', () => {
     }
   }
 
-  async function addSchedule(payload: CreateScheduleRequest): Promise<void> {
+  async function runMutation(
+    action: () => Promise<unknown>,
+    fallbackMessage: string,
+  ): Promise<boolean> {
     submitting.value = true
+    error.value = undefined
     try {
-      await createScheduleItem(payload)
+      await action()
       await loadSchedules()
+      return true
+    } catch (err) {
+      error.value = extractErrorMessage(err, fallbackMessage)
+      return false
     } finally {
       submitting.value = false
     }
   }
 
-  async function editSchedule(id: number, payload: UpdateScheduleRequest): Promise<void> {
-    submitting.value = true
-    try {
-      await updateScheduleItem(id, payload)
-      await loadSchedules()
-    } finally {
-      submitting.value = false
-    }
+  async function addSchedule(payload: CreateScheduleRequest): Promise<boolean> {
+    return runMutation(() => createScheduleItem(payload), '创建失败')
   }
 
-  async function toggleDone(entry: ScheduleDisplayItem): Promise<void> {
+  async function editSchedule(id: number, payload: UpdateScheduleRequest): Promise<boolean> {
+    return runMutation(() => updateScheduleItem(id, payload), '更新失败')
+  }
+
+  async function toggleDone(entry: ScheduleDisplayItem): Promise<boolean> {
     if (entry.rangeRole === 'start') {
-      return
+      return false
     }
     const { schedule, occurrenceIndex } = entry
     if (schedule.type === ScheduleTypeEnum.Recurring) {
-      if (occurrenceIndex !== undefined) {
-        const payload = buildToggleRecurringOccurrencePayload(schedule, occurrenceIndex)
-        await editSchedule(schedule.id, payload)
+      if (occurrenceIndex === undefined) {
+        return false
       }
-      return
+      const payload = buildToggleRecurringOccurrencePayload(schedule, occurrenceIndex)
+      return runMutation(() => updateScheduleItem(schedule.id, payload), '状态更新失败')
     }
     const payload = buildToggleDonePayload(schedule, !schedule.done)
-    await editSchedule(schedule.id, payload)
+    return runMutation(() => updateScheduleItem(schedule.id, payload), '状态更新失败')
   }
 
-  async function removeSchedule(id: number): Promise<void> {
-    submitting.value = true
-    try {
-      await deleteScheduleItem(id)
-      await loadSchedules()
-    } finally {
-      submitting.value = false
-    }
+  async function removeSchedule(id: number): Promise<boolean> {
+    return runMutation(() => deleteScheduleItem(id), '删除失败')
   }
 
   return {
@@ -159,10 +146,10 @@ export const useScheduleStore = defineStore('schedule', () => {
     loadSchedules,
     loading,
     removeSchedule,
+    resetFilters,
     schedules,
     searchQuery,
     sortMode,
-    stats,
     statusFilter,
     submitting,
     toggleDone,

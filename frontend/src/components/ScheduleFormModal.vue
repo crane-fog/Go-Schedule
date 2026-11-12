@@ -1,21 +1,26 @@
 <script setup lang="ts">
 import { computed, reactive, ref, watch } from 'vue'
 import {
-  RecurrenceFrequencyEnum,
   ScheduleTypeEnum,
   type CreateScheduleRequest,
   type Schedule,
   type UpdateScheduleRequest,
 } from '@/api'
 import {
+  PRIORITY_PRESETS,
+  RECURRENCE_END_MODE_OPTIONS,
+  RECURRENCE_FREQUENCY_OPTIONS,
+  SCHEDULE_TYPE_OPTIONS,
+} from '@/constants/schedule'
+import type { ScheduleFormState } from '@/types/schedule'
+import {
   buildCreatePayload,
   buildUpdatePayload,
   createDefaultFormState,
-  formatInferredRecurrenceHint,
   scheduleToFormState,
   validateScheduleForm,
-  type ScheduleFormState,
-} from '@/utils/schedule-helpers'
+} from '@/utils/schedule-form'
+import { formatInferredRecurrenceHint } from '@/utils/schedule-format'
 
 const {
   visible,
@@ -39,12 +44,6 @@ const isEditing = computed(() => Boolean(editingItem))
 const recurrenceHint = computed(() =>
   formatInferredRecurrenceHint(form.frequency, form.interval, form.recurrenceStartLocal),
 )
-const typeOptions = [
-  { desc: '指定单个发生时间点', label: '单次日程', value: ScheduleTypeEnum.OneTime },
-  { desc: '包含开始与结束时间', label: '时间段', value: ScheduleTypeEnum.TimeRange },
-  { desc: '按天/周/月/年定期重复', label: '周期重复', value: ScheduleTypeEnum.Recurring },
-] as const
-const priorityPresets = [-3, -2, -1, 0, 1, 2, 3] as const
 
 function syncFormFromProps(): void {
   formError.value = undefined
@@ -117,7 +116,7 @@ function handleSubmit(): void {
             <label class="form-label">类型 *</label>
             <div class="type-selector">
               <button
-                v-for="opt in typeOptions"
+                v-for="opt in SCHEDULE_TYPE_OPTIONS"
                 :key="opt.value"
                 type="button"
                 class="type-option"
@@ -136,7 +135,7 @@ function handleSubmit(): void {
               <div class="priority-controls">
                 <div class="priority-presets">
                   <button
-                    v-for="preset in priorityPresets"
+                    v-for="preset in PRIORITY_PRESETS"
                     :key="preset"
                     type="button"
                     class="preset-chip"
@@ -202,10 +201,13 @@ function handleSubmit(): void {
               <div class="form-group">
                 <label class="form-label" for="rec-frequency">重复频率 *</label>
                 <select id="rec-frequency" v-model="form.frequency" class="form-input">
-                  <option :value="RecurrenceFrequencyEnum.Daily">按天 (daily)</option>
-                  <option :value="RecurrenceFrequencyEnum.Weekly">按周 (weekly)</option>
-                  <option :value="RecurrenceFrequencyEnum.Monthly">按月 (monthly)</option>
-                  <option :value="RecurrenceFrequencyEnum.Yearly">按年 (yearly)</option>
+                  <option
+                    v-for="opt in RECURRENCE_FREQUENCY_OPTIONS"
+                    :key="opt.value"
+                    :value="opt.value"
+                  >
+                    {{ opt.label }}
+                  </option>
                 </select>
               </div>
 
@@ -238,9 +240,13 @@ function handleSubmit(): void {
               <div class="form-group">
                 <label class="form-label" for="rec-end-mode">结束条件</label>
                 <select id="rec-end-mode" v-model="form.endMode" class="form-input">
-                  <option value="never">长期重复（无截止）</option>
-                  <option value="until">指定截止时间 (until)</option>
-                  <option value="count">指定重复次数 (count)</option>
+                  <option
+                    v-for="opt in RECURRENCE_END_MODE_OPTIONS"
+                    :key="opt.value"
+                    :value="opt.value"
+                  >
+                    {{ opt.label }}
+                  </option>
                 </select>
               </div>
 
@@ -469,16 +475,6 @@ function handleSubmit(): void {
 
 .priority-num-input {
   width: 82px;
-}
-
-.checkbox-row {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.5rem;
-  height: 38px;
-  font-size: 0.9rem;
-  color: var(--text-regular);
-  cursor: pointer;
 }
 
 .type-section {

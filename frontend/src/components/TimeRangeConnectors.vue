@@ -1,15 +1,14 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import type { ScheduleDisplayItem } from '@/types/schedule'
 import {
-  BASE_OFFSET_PX,
   CARD_GAP_PX,
-  LANE_STEP_PX,
   buildOrthogonalPath,
   buildRangePairSpecs,
+  computeConnectorGutterWidth,
   type RangePairSpec,
   type RenderedBracket,
 } from '@/utils/range-connectors'
-import type { ScheduleDisplayItem } from '@/utils/schedule-occurrences'
 
 const {
   entries,
@@ -35,19 +34,19 @@ const specResult = computed(() => {
   return buildRangePairSpecs(entries)
 })
 
-const gutterWidth = computed(() => {
-  if (specResult.value.pairs.length === 0) {
-    return 0
-  }
-  return BASE_OFFSET_PX + specResult.value.maxLane * LANE_STEP_PX + 8
-})
+const gutterWidth = computed(() =>
+  computeConnectorGutterWidth(specResult.value.pairs.length, specResult.value.maxLane),
+)
 
 let resizeObserver: ResizeObserver | undefined = undefined
 
+function getElementCenterY(el: HTMLElement): number {
+  return Math.round(el.offsetTop + el.offsetHeight / 2)
+}
+
 function buildKeyElementMap(container: HTMLElement): Map<string, HTMLElement> {
   const map = new Map<string, HTMLElement>()
-  const nodes = container.querySelectorAll<HTMLElement>('[data-entry-key]')
-  for (const node of nodes) {
+  for (const node of container.querySelectorAll<HTMLElement>('[data-entry-key]')) {
     const key = node.dataset.entryKey
     if (key) {
       map.set(key, node)
@@ -65,7 +64,7 @@ function toRenderedBracket(
   if (!startEl) {
     return undefined
   }
-  const startY = Math.round(startEl.offsetTop + startEl.offsetHeight / 2)
+  const startY = getElementCenterY(startEl)
   let endEl: HTMLElement | undefined = undefined
   if (pair.endKey) {
     endEl = elMap.get(pair.endKey)
@@ -73,23 +72,23 @@ function toRenderedBracket(
   let endY = fallbackBottomY
   let hasEnd = false
   if (endEl) {
-    endY = Math.round(endEl.offsetTop + endEl.offsetHeight / 2)
+    endY = getElementCenterY(endEl)
     hasEnd = true
   }
   const width = gutterWidth.value
-  const path = buildOrthogonalPath({
-    endY,
-    gutterWidth: width,
-    hasEnd,
-    lane: pair.lane,
-    startY,
-  })
+
   return {
     color: pair.color,
     done: pair.done,
     endY,
     hasEnd,
-    path,
+    path: buildOrthogonalPath({
+      endY,
+      gutterWidth: width,
+      hasEnd,
+      lane: pair.lane,
+      startY,
+    }),
     rightX: width - CARD_GAP_PX,
     scheduleId: pair.scheduleId,
     startY,
@@ -120,9 +119,7 @@ function observeListContainer(): void {
   if (typeof ResizeObserver === 'undefined' || !listEl) {
     return
   }
-  resizeObserver = new ResizeObserver(() => {
-    measurePositions()
-  })
+  resizeObserver = new ResizeObserver(measurePositions)
   resizeObserver.observe(listEl)
 }
 
