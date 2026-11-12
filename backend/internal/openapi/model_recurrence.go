@@ -19,7 +19,7 @@ type Recurrence struct {
 	// 重复频率
 	Frequency string `json:"frequency"`
 
-	// 重复间隔，单位由 `frequency` 决定： - `daily`：每 `interval` 天 - `weekly`：每 `interval` 周；配置 `day_of_week` 时，在每个间隔周内星期几发生 - `monthly`：每 `interval` 个月 - `yearly`：每 `interval` 年 默认值为 1，表示每个频率单位发生一次。 
+	// 重复间隔，单位由 `frequency` 决定： - `daily`：每 `interval` 天 - `weekly`：每 `interval` 周 - `monthly`：每 `interval` 个月 - `yearly`：每 `interval` 年 默认值为 1，表示每个频率单位发生一次。 
 	Interval int32 `json:"interval,omitempty"`
 
 	// 第一次发生时间，同时决定后续发生的时间点
@@ -30,15 +30,6 @@ type Recurrence struct {
 
 	// 最多发生次数；与 `until` 二选一
 	Count *int32 `json:"count,omitempty"`
-
-	// 星期几，0=周日、6=周六；仅 `frequency=weekly` 时使用，省略则取 `start_at` 的星期
-	DayOfWeek int32 `json:"day_of_week,omitempty"`
-
-	// 每月几号；仅 `frequency=monthly` 时使用
-	DayOfMonth int32 `json:"day_of_month,omitempty"`
-
-	// 每年几月；仅 `frequency=yearly` 时使用
-	Month int32 `json:"month,omitempty"`
 
 	// 创建/修改该周期日程时的设备 IANA 时区（如 `Asia/Shanghai`），由客户端自动注入，用于计算每次发生的时间点
 	Timezone string `json:"timezone"`
