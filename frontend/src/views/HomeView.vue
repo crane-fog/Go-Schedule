@@ -1,26 +1,96 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import type { CreateScheduleRequest, Schedule, UpdateScheduleRequest } from '@/api'
+import NoteBoard from '@/components/NoteBoard.vue'
 import ScheduleCard from '@/components/ScheduleCard.vue'
 import ScheduleFormModal from '@/components/ScheduleFormModal.vue'
 import ScheduleToolbar from '@/components/ScheduleToolbar.vue'
 import TimeRangeConnectors from '@/components/TimeRangeConnectors.vue'
 import { useInfiniteScroll } from '@/composables/use-infinite-scroll'
+import { useNoteStore } from '@/stores/note'
 import { useScheduleStore } from '@/stores/schedule'
 import { formatDateDivider, getDateGroupKey } from '@/utils/date-time'
 
+type MainViewMode = 'schedules' | 'notes'
+
 const store = useScheduleStore()
+const noteStore = useNoteStore()
+
+const activeView = ref<MainViewMode>('schedules')
+const noteBoardRef = ref<InstanceType<typeof NoteBoard> | undefined>(undefined)
+
 const modalVisible = ref(false)
 const editingSchedule = ref<Schedule | undefined>(undefined)
 const sentinelRef = ref<HTMLElement | undefined>(undefined)
 const scheduleListRef = ref<HTMLElement | undefined>(undefined)
 const connectorGutterPx = ref(0)
 
+const noteSaveStatusLabel = computed(() => {
+  switch (noteStore.activeSaveStatus) {
+    case 'saving': {
+      return '保存中...'
+    }
+    case 'dirty': {
+      return '未保存 ●'
+    }
+    case 'saved': {
+      return '已保存'
+    }
+    default: {
+      return ''
+    }
+  }
+})
+
 useInfiniteScroll({
-  canLoadMore: () => store.hasMoreInfinite,
+  canLoadMore: () => activeView.value === 'schedules' && store.hasMoreInfinite,
   onLoadMore: () => store.loadMoreOccurrences(),
   sentinelRef,
 })
+
+async function switchMainView(mode: MainViewMode): Promise<void> {
+  if (activeView.value === mode) {
+    return
+  }
+  if (activeView.value === 'notes') {
+    await noteBoardRef.value?.syncAndFlushActive()
+  }
+  activeView.value = mode
+  if (mode === 'notes' && !noteStore.loaded) {
+    await noteStore.loadNotes()
+  }
+}
+
+async function handleSaveActiveNote(): Promise<void> {
+  await noteBoardRef.value?.syncAndFlushActive()
+}
+
+async function handleRefreshNotes(): Promise<void> {
+  await noteBoardRef.value?.syncAndFlushActive()
+  await noteStore.loadNotes()
+}
+
+async function handleCreateNote(): Promise<void> {
+  await noteBoardRef.value?.syncAndFlushActive()
+  await noteStore.createNote()
+}
+
+function handleBeforeUnload(event: BeforeUnloadEvent): void {
+  if (noteStore.hasUnsavedOrSaving) {
+    event.preventDefault()
+    event.returnValue = ''
+  }
+}
+
+function handleGlobalKeydown(event: KeyboardEvent): void {
+  if (activeView.value !== 'notes') {
+    return
+  }
+  if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 's') {
+    event.preventDefault()
+    void handleSaveActiveNote()
+  }
+}
 
 function openCreateModal(): void {
   editingSchedule.value = undefined
@@ -75,14 +145,44 @@ function shouldShowDateDivider(idx: number): boolean {
 
 onMounted(() => {
   void store.loadSchedules()
+  globalThis.addEventListener('beforeunload', handleBeforeUnload)
+  globalThis.addEventListener('keydown', handleGlobalKeydown)
+})
+
+onBeforeUnmount(() => {
+  globalThis.removeEventListener('beforeunload', handleBeforeUnload)
+  globalThis.removeEventListener('keydown', handleGlobalKeydown)
 })
 </script>
 
 <template>
   <main class="schedule-page">
-    <!-- 顶部操作栏 -->
+    <!-- 顶部视图切换与操作栏 -->
     <header class="page-header">
-      <div class="header-actions">
+      <div class="filter-tabs" role="tablist" aria-label="功能视图切换">
+        <button
+          type="button"
+          role="tab"
+          :aria-selected="activeView === 'schedules'"
+          class="tab-btn"
+          :class="{ active: activeView === 'schedules' }"
+          @click="switchMainView('schedules')"
+        >
+          日程列表
+        </button>
+        <button
+          type="button"
+          role="tab"
+          :aria-selected="activeView === 'notes'"
+          class="tab-btn"
+          :class="{ active: activeView === 'notes' }"
+          @click="switchMainView('notes')"
+        >
+          记事板
+        </button>
+      </div>
+
+      <div v-if="activeView === 'schedules'" class="header-actions">
         <button
           type="button"
           class="btn btn-secondary"
@@ -93,87 +193,125 @@ onMounted(() => {
         </button>
         <button type="button" class="btn btn-primary" @click="openCreateModal">+ 新建日程</button>
       </div>
+
+      <div v-else class="header-actions">
+        <span
+          v-if="noteSaveStatusLabel"
+          class="save-status-pill"
+          :class="`status-${noteStore.activeSaveStatus}`"
+        >
+          {{ noteSaveStatusLabel }}
+        </span>
+        <button
+          type="button"
+          class="btn btn-secondary"
+          :disabled="noteStore.loading"
+          @click="handleRefreshNotes"
+        >
+          {{ noteStore.loading ? '刷新中...' : '刷新记事' }}
+        </button>
+        <button
+          type="button"
+          class="btn btn-secondary"
+          :disabled="!noteStore.activeNote || noteStore.activeSaveStatus === 'saving'"
+          @click="handleSaveActiveNote"
+        >
+          保存当前页签
+        </button>
+        <button
+          type="button"
+          class="btn btn-primary"
+          :disabled="noteStore.creating"
+          @click="handleCreateNote"
+        >
+          {{ noteStore.creating ? '新建中...' : '+ 新建页签' }}
+        </button>
+      </div>
     </header>
 
-    <!-- 筛选、排序与搜索栏 -->
-    <ScheduleToolbar
-      v-model:sort-mode="store.sortMode"
-      v-model:status-filter="store.statusFilter"
-      v-model:type-filter="store.typeFilter"
-      v-model:search-query="store.searchQuery"
-    />
+    <template v-if="activeView === 'schedules'">
+      <!-- 筛选、排序与搜索栏 -->
+      <ScheduleToolbar
+        v-model:sort-mode="store.sortMode"
+        v-model:status-filter="store.statusFilter"
+        v-model:type-filter="store.typeFilter"
+        v-model:search-query="store.searchQuery"
+      />
 
-    <!-- 接口错误提示 -->
-    <div v-if="store.error" class="notice-banner notice-error">
-      <span>{{ store.error }}</span>
-      <button type="button" class="btn btn-ghost" @click="store.loadSchedules()">重试</button>
-    </div>
-
-    <!-- 列表区域 -->
-    <section>
-      <div v-if="store.loading && store.schedules.length === 0" class="state-box">
-        <p>正在加载日程数据...</p>
+      <!-- 接口错误提示 -->
+      <div v-if="store.error" class="notice-banner notice-error">
+        <span>{{ store.error }}</span>
+        <button type="button" class="btn btn-ghost" @click="store.loadSchedules()">重试</button>
       </div>
 
-      <div v-else-if="store.schedules.length === 0" class="state-box">
-        <p class="state-title">暂无任何日程</p>
-        <p class="state-desc">点击右上角「新建日程」创建你的第一条日程安排吧。</p>
-        <button type="button" class="btn btn-primary" @click="openCreateModal">
-          + 新建第一条日程
-        </button>
-      </div>
+      <!-- 列表区域 -->
+      <section>
+        <div v-if="store.loading && store.schedules.length === 0" class="state-box">
+          <p>正在加载日程数据...</p>
+        </div>
 
-      <div v-else-if="store.displayedSchedules.length === 0" class="state-box">
-        <p class="state-title">没有符合当前筛选条件的日程</p>
-        <button type="button" class="btn btn-secondary" @click="store.resetFilters()">
-          重置筛选条件
-        </button>
-      </div>
-
-      <div
-        v-else
-        ref="scheduleListRef"
-        class="schedule-list"
-        :style="{ '--connector-gutter': `${connectorGutterPx}px` }"
-      >
-        <TimeRangeConnectors
-          :entries="store.displayedSchedules"
-          :list-el="scheduleListRef"
-          :enabled="store.sortMode === 'time'"
-          @gutter-change="connectorGutterPx = $event"
-        />
-
-        <template v-for="(entry, idx) in store.displayedSchedules" :key="entry.key">
-          <div v-if="shouldShowDateDivider(idx)" class="date-divider">
-            <span class="date-divider-text">{{ formatDateDivider(entry.sortTimeMs) }}</span>
-          </div>
-          <ScheduleCard
-            :entry="entry"
-            :busy="store.submitting"
-            @toggle-done="store.toggleDone"
-            @edit="openEditModal"
-            @remove="handleDelete"
-          />
-        </template>
-
-        <div v-if="store.hasMoreInfinite" ref="sentinelRef" class="infinite-sentinel">
-          <span class="infinite-hint">下滑自动展开更多周期重复日程...</span>
-          <button type="button" class="btn btn-ghost" @click="store.loadMoreOccurrences()">
-            加载更多
+        <div v-else-if="store.schedules.length === 0" class="state-box">
+          <p class="state-title">暂无任何日程</p>
+          <p class="state-desc">点击右上角「新建日程」创建你的第一条日程安排吧。</p>
+          <button type="button" class="btn btn-primary" @click="openCreateModal">
+            + 新建第一条日程
           </button>
         </div>
-      </div>
-    </section>
 
-    <!-- 新建/编辑弹窗 -->
-    <ScheduleFormModal
-      :visible="modalVisible"
-      :editing-item="editingSchedule"
-      :submitting="store.submitting"
-      @close="closeModal"
-      @create="handleCreate"
-      @update="handleUpdate"
-    />
+        <div v-else-if="store.displayedSchedules.length === 0" class="state-box">
+          <p class="state-title">没有符合当前筛选条件的日程</p>
+          <button type="button" class="btn btn-secondary" @click="store.resetFilters()">
+            重置筛选条件
+          </button>
+        </div>
+
+        <div
+          v-else
+          ref="scheduleListRef"
+          class="schedule-list"
+          :style="{ '--connector-gutter': `${connectorGutterPx}px` }"
+        >
+          <TimeRangeConnectors
+            :entries="store.displayedSchedules"
+            :list-el="scheduleListRef"
+            :enabled="store.sortMode === 'time'"
+            @gutter-change="connectorGutterPx = $event"
+          />
+
+          <template v-for="(entry, idx) in store.displayedSchedules" :key="entry.key">
+            <div v-if="shouldShowDateDivider(idx)" class="date-divider">
+              <span class="date-divider-text">{{ formatDateDivider(entry.sortTimeMs) }}</span>
+            </div>
+            <ScheduleCard
+              :entry="entry"
+              :busy="store.submitting"
+              @toggle-done="store.toggleDone"
+              @edit="openEditModal"
+              @remove="handleDelete"
+            />
+          </template>
+
+          <div v-if="store.hasMoreInfinite" ref="sentinelRef" class="infinite-sentinel">
+            <span class="infinite-hint">下滑自动展开更多周期重复日程...</span>
+            <button type="button" class="btn btn-ghost" @click="store.loadMoreOccurrences()">
+              加载更多
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <!-- 新建/编辑弹窗 -->
+      <ScheduleFormModal
+        :visible="modalVisible"
+        :editing-item="editingSchedule"
+        :submitting="store.submitting"
+        @close="closeModal"
+        @create="handleCreate"
+        @update="handleUpdate"
+      />
+    </template>
+
+    <NoteBoard v-else ref="noteBoardRef" />
   </main>
 </template>
 
@@ -190,7 +328,7 @@ onMounted(() => {
 .page-header {
   display: flex;
   align-items: center;
-  justify-content: flex-end;
+  justify-content: space-between;
   flex-wrap: wrap;
   gap: 1rem;
 }
@@ -199,7 +337,31 @@ onMounted(() => {
   display: flex;
   align-items: center;
   justify-content: flex-end;
+  flex-wrap: wrap;
   gap: 0.65rem;
+}
+
+.save-status-pill {
+  font-size: 0.82rem;
+  font-weight: 500;
+  padding: 0.25rem 0.6rem;
+  border-radius: 999px;
+  background: var(--surface-muted);
+  color: var(--text-secondary);
+}
+
+.save-status-pill.status-dirty {
+  color: var(--primary-color);
+  background: rgba(37, 99, 235, 0.12);
+}
+
+.save-status-pill.status-saving {
+  color: var(--text-primary);
+}
+
+.save-status-pill.status-saved {
+  color: var(--success-color);
+  background: rgba(16, 185, 129, 0.12);
 }
 
 .notice-banner {

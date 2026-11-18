@@ -1,19 +1,25 @@
 import {
   Configuration,
+  NotesApi,
   SchedulesApi,
+  type CreateNoteRequest,
   type CreateScheduleRequest,
   type ErrorResponse,
+  type Note,
+  type NoteImageData,
   type Schedule,
+  type UpdateNoteRequest,
   type UpdateScheduleRequest,
 } from './index'
 
 type ApiEnvelope<TData> = { code: 200; data: TData } | ErrorResponse
 
-const schedulesApi = new SchedulesApi(
-  new Configuration({
-    basePath: (import.meta.env.VITE_API_BASE_URL as string | undefined) ?? '',
-  }),
-)
+const apiConfiguration = new Configuration({
+  basePath: (import.meta.env.VITE_API_BASE_URL as string | undefined) ?? '',
+})
+
+const schedulesApi = new SchedulesApi(apiConfiguration)
+const notesApi = new NotesApi(apiConfiguration)
 
 export function extractErrorMessage(err: unknown, fallback: string): string {
   if (err instanceof Error && err.message) {
@@ -65,4 +71,32 @@ export async function updateScheduleItem(
 export async function deleteScheduleItem(id: number): Promise<number> {
   const data = await requestApi(() => schedulesApi.deleteSchedule({ id }), '删除日程失败')
   return data.id
+}
+
+export async function fetchNotes(): Promise<Note[]> {
+  const data = await requestApi(
+    () => notesApi.listNotes(),
+    '获取记事列表失败，请检查后端服务是否已启动',
+  )
+  return data ?? []
+}
+
+export async function createNoteItem(req: CreateNoteRequest): Promise<Note> {
+  return requestApi(() => notesApi.createNote({ createNoteRequest: req }), '创建记事页签失败')
+}
+
+export async function updateNoteItem(id: number, req: UpdateNoteRequest): Promise<Note> {
+  return requestApi(
+    () => notesApi.updateNote({ id, updateNoteRequest: req }),
+    '保存记事页签失败',
+  )
+}
+
+export async function deleteNoteItem(id: number): Promise<number> {
+  const data = await requestApi(() => notesApi.deleteNote({ id }), '删除记事页签失败')
+  return data.id
+}
+
+export async function uploadNoteImage(file: File): Promise<NoteImageData> {
+  return requestApi(() => notesApi.uploadNoteImage({ file }), '上传图片失败')
 }

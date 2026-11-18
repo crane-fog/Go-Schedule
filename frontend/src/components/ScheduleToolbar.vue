@@ -75,32 +75,6 @@ const searchQuery = defineModel<string>('searchQuery', { required: true })
   gap: 0.6rem;
 }
 
-.filter-tabs {
-  display: flex;
-  gap: 0.35rem;
-  background: var(--surface-muted);
-  padding: 0.25rem;
-  border-radius: 8px;
-}
-
-.tab-btn {
-  border: none;
-  background: transparent;
-  color: var(--text-secondary);
-  padding: 0.38rem 0.8rem;
-  border-radius: 6px;
-  font-size: 0.85rem;
-  font-weight: 500;
-  cursor: pointer;
-  transition: all 0.15s ease;
-}
-
-.tab-btn.active {
-  background: var(--card-bg);
-  color: var(--text-primary);
-  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.08);
-}
-
 .toolbar-right {
   display: flex;
   align-items: center;
