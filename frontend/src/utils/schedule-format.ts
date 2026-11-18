@@ -34,6 +34,12 @@ export function formatSchedulePrimaryTime(entry: ScheduleDisplayItem): string {
     return formatDateTime(schedule.happen_time)
   }
   if (schedule.type === ScheduleTypeEnum.TimeRange) {
+    if (entry.rangeRole === 'start') {
+      return `${formatDateTime(schedule.start_at)} ~`
+    }
+    if (entry.rangeRole === 'end') {
+      return `~ ${formatDateTime(schedule.end_at)}`
+    }
     return `${formatDateTime(schedule.start_at)} ~ ${formatDateTime(schedule.end_at)}`
   }
   const baseTime = formatDateTime(entry.occurrenceIso)

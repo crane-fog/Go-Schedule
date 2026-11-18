@@ -32,9 +32,9 @@ export const SORT_MODE_OPTIONS: readonly { label: string; value: SortMode }[] = 
 ]
 
 export const STATUS_FILTER_OPTIONS: readonly { label: string; value: StatusFilter }[] = [
-  { label: '全部', value: 'all' },
   { label: '待办', value: 'pending' },
   { label: '已完成', value: 'done' },
+  { label: '全部', value: 'all' },
 ]
 
 export const TYPE_FILTER_OPTIONS: readonly { label: string; value: TypeFilter }[] = [

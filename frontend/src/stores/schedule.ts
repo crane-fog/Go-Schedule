@@ -40,7 +40,7 @@ export const useScheduleStore = defineStore('schedule', () => {
   const error = ref<string | undefined>(undefined)
 
   const sortMode = ref<SortMode>('time')
-  const statusFilter = ref<StatusFilter>('all')
+  const statusFilter = ref<StatusFilter>('pending')
   const typeFilter = ref<TypeFilter>('all')
   const searchQuery = ref('')
   const visibleLimit = ref(INITIAL_LIMIT)
