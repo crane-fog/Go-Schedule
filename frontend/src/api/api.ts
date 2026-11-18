@@ -2,7 +2,7 @@
 /* eslint-disable */
 /**
  * Go-Schedule API
- * 练习用日程服务 API。  统一响应约定： - 所有接口的 HTTP 状态码固定为 `200`； - 业务状态由响应 JSON 中的 `code` 字段表示：`200` 成功、`400` 参数错误、`404` 资源不存在、`500` 服务器内部错误； - 响应体统一为 `{\"code\": xxx, \"data\": ...}`； - 成功时 `data` 为业务数据，失败时 `data` 为 `{\"message\": \"...\"}`； - 列表按规则排序：未完成在前、开始时间升序、开始时间相同时优先级降序。  日程使用统一的 `Schedule` 结构，由 `type` 决定哪些字段生效： - `one_time`：只使用 `happen_time`； - `time_range`：只使用 `start_at` / `end_at`，两个时间都允许为 `null`； - `recurring`：只使用 `recurrence`。 当前类型不使用的字段统一返回 `null`。 
+ * 练习用日程与记事板服务 API。  统一响应约定： - 所有 JSON 接口的 HTTP 状态码固定为 `200`； - 业务状态由响应 JSON 中的 `code` 字段表示：`200` 成功、`400` 参数错误、`404` 资源不存在、`500` 服务器内部错误； - JSON 响应体统一为 `{\"code\": xxx, \"data\": ...}`； - 成功时 `data` 为业务数据，失败时 `data` 为 `{\"message\": \"...\"}`； - 图片读取接口（`GET /api/v1/notes/images/{filename}`）直接返回图片文件流（`image/_*`），文件不存在时返回 HTTP `404`； - 日程列表按规则排序：未完成在前、开始时间升序、开始时间相同时优先级降序； - 记事页签列表按规则排序：`sort_order` 升序、`id` 升序。  日程使用统一的 `Schedule` 结构，由 `type` 决定哪些字段生效： - `one_time`：只使用 `happen_time`； - `time_range`：只使用 `start_at` / `end_at`，两个时间都允许为 `null`； - `recurring`：只使用 `recurrence`。 当前类型不使用的字段统一返回 `null`。 
  *
  * The version of the OpenAPI document: 0.1.0
  * 
@@ -23,6 +23,22 @@ import type { RequestArgs } from './base';
 // @ts-ignore
 import { BASE_PATH, COLLECTION_FORMATS, BaseAPI, RequiredError, operationServerMap } from './base';
 
+/**
+ * @type CreateNote200Response
+ */
+export type CreateNote200Response = ErrorResponse | NoteResponse;
+
+export interface CreateNoteRequest {
+    'title': string;
+    /**
+     * Markdown 正文内容（可选，默认为空字符串）
+     */
+    'content'?: string;
+    /**
+     * 页签排序权重（可选，默认 0）
+     */
+    'sort_order'?: number;
+}
 /**
  * @type CreateSchedule200Response
  */
@@ -66,6 +82,22 @@ export const CreateScheduleRequestTypeEnum = {
 export type CreateScheduleRequestTypeEnum = typeof CreateScheduleRequestTypeEnum[keyof typeof CreateScheduleRequestTypeEnum];
 
 /**
+ * @type DeleteNote200Response
+ */
+export type DeleteNote200Response = DeleteNoteResponse | ErrorResponse;
+
+export interface DeleteNoteResponse {
+    'code': DeleteNoteResponseCodeEnum;
+    'data': DeleteScheduleResponseData;
+}
+
+export const DeleteNoteResponseCodeEnum = {
+    NUMBER_200: 200,
+} as const;
+
+export type DeleteNoteResponseCodeEnum = typeof DeleteNoteResponseCodeEnum[keyof typeof DeleteNoteResponseCodeEnum];
+
+/**
  * @type DeleteSchedule200Response
  */
 export type DeleteSchedule200Response = DeleteScheduleResponse | ErrorResponse;
@@ -101,9 +133,71 @@ export interface ErrorResponseData {
     'message': string;
 }
 /**
+ * @type ListNotes200Response
+ */
+export type ListNotes200Response = ErrorResponse | NoteListResponse;
+
+/**
  * @type ListSchedules200Response
  */
 export type ListSchedules200Response = ErrorResponse | ScheduleListResponse;
+
+export interface Note {
+    'id': number;
+    'title': string;
+    /**
+     * Markdown 正文内容（允许为空字符串）
+     */
+    'content': string;
+    /**
+     * 页签排序权重（按升序排列）
+     */
+    'sort_order': number;
+    'created_at': string;
+    'updated_at': string;
+}
+export interface NoteImageData {
+    /**
+     * 服务端生成的图片文件名
+     */
+    'filename': string;
+    /**
+     * 图片访问路径（可直接用于 Markdown 图片语法）
+     */
+    'url': string;
+}
+export interface NoteImageUploadResponse {
+    'code': NoteImageUploadResponseCodeEnum;
+    'data': NoteImageData;
+}
+
+export const NoteImageUploadResponseCodeEnum = {
+    NUMBER_200: 200,
+} as const;
+
+export type NoteImageUploadResponseCodeEnum = typeof NoteImageUploadResponseCodeEnum[keyof typeof NoteImageUploadResponseCodeEnum];
+
+export interface NoteListResponse {
+    'code': NoteListResponseCodeEnum;
+    'data': Array<Note>;
+}
+
+export const NoteListResponseCodeEnum = {
+    NUMBER_200: 200,
+} as const;
+
+export type NoteListResponseCodeEnum = typeof NoteListResponseCodeEnum[keyof typeof NoteListResponseCodeEnum];
+
+export interface NoteResponse {
+    'code': NoteResponseCodeEnum;
+    'data': Note;
+}
+
+export const NoteResponseCodeEnum = {
+    NUMBER_200: 200,
+} as const;
+
+export type NoteResponseCodeEnum = typeof NoteResponseCodeEnum[keyof typeof NoteResponseCodeEnum];
 
 /**
  * 定期重复配置。每个发生点视为一次 `one_time` 事件。 `interval` 表示“每隔几个 frequency 单位”，不是固定天数。 `until` 与 `count` 二选一，都不提供表示无限重复。 `timezone` 由客户端自动注入创建/修改时的设备时区，用于锚定重复规则的日历与挂钟时间。 
@@ -213,6 +307,17 @@ export const ScheduleResponseCodeEnum = {
 
 export type ScheduleResponseCodeEnum = typeof ScheduleResponseCodeEnum[keyof typeof ScheduleResponseCodeEnum];
 
+export interface UpdateNoteRequest {
+    'title': string;
+    /**
+     * Markdown 正文内容（允许为空字符串）
+     */
+    'content': string;
+    /**
+     * 页签排序权重
+     */
+    'sort_order': number;
+}
 export interface UpdateScheduleRequest {
     'title': string;
     /**
@@ -253,6 +358,507 @@ export const UpdateScheduleRequestTypeEnum = {
 } as const;
 
 export type UpdateScheduleRequestTypeEnum = typeof UpdateScheduleRequestTypeEnum[keyof typeof UpdateScheduleRequestTypeEnum];
+
+/**
+ * @type UploadNoteImage200Response
+ */
+export type UploadNoteImage200Response = ErrorResponse | NoteImageUploadResponse;
+
+
+/**
+ * NotesApi - axios parameter creator
+ */
+export const NotesApiAxiosParamCreator = function (configuration?: Configuration) {
+    return {
+        /**
+         * 
+         * @summary 新建记事页签
+         * @param {CreateNoteRequest} createNoteRequest 
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        createNote: async (createNoteRequest: CreateNoteRequest, options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
+            // verify required parameter 'createNoteRequest' is not null or undefined
+            assertParamExists('createNote', 'createNoteRequest', createNoteRequest)
+            const localVarPath = `/api/v1/notes`;
+            // use dummy base URL string because the URL constructor only accepts absolute URLs.
+            const localVarUrlObj = new URL(localVarPath, DUMMY_BASE_URL);
+            let baseOptions;
+            if (configuration) {
+                baseOptions = configuration.baseOptions;
+            }
+
+            const localVarRequestOptions = { method: 'POST', ...baseOptions, ...options};
+            const localVarHeaderParameter = {} as any;
+            const localVarQueryParameter = {} as any;
+
+            localVarHeaderParameter['Content-Type'] = 'application/json';
+            localVarHeaderParameter['Accept'] = 'application/json';
+
+            setSearchParams(localVarUrlObj, localVarQueryParameter);
+            let headersFromBaseOptions = baseOptions && baseOptions.headers ? baseOptions.headers : {};
+            localVarRequestOptions.headers = {...localVarHeaderParameter, ...headersFromBaseOptions, ...options.headers};
+            localVarRequestOptions.data = serializeDataIfNeeded(createNoteRequest, localVarRequestOptions, configuration)
+
+            return {
+                url: toPathString(localVarUrlObj),
+                options: localVarRequestOptions,
+            };
+        },
+        /**
+         * 
+         * @summary 删除记事页签
+         * @param {number} id 记事页签 ID
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        deleteNote: async (id: number, options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
+            // verify required parameter 'id' is not null or undefined
+            assertParamExists('deleteNote', 'id', id)
+            const localVarPath = `/api/v1/notes/{id}`
+                .replace('{id}', encodeURIComponent(String(id)));
+            // use dummy base URL string because the URL constructor only accepts absolute URLs.
+            const localVarUrlObj = new URL(localVarPath, DUMMY_BASE_URL);
+            let baseOptions;
+            if (configuration) {
+                baseOptions = configuration.baseOptions;
+            }
+
+            const localVarRequestOptions = { method: 'DELETE', ...baseOptions, ...options};
+            const localVarHeaderParameter = {} as any;
+            const localVarQueryParameter = {} as any;
+
+            localVarHeaderParameter['Accept'] = 'application/json';
+
+            setSearchParams(localVarUrlObj, localVarQueryParameter);
+            let headersFromBaseOptions = baseOptions && baseOptions.headers ? baseOptions.headers : {};
+            localVarRequestOptions.headers = {...localVarHeaderParameter, ...headersFromBaseOptions, ...options.headers};
+
+            return {
+                url: toPathString(localVarUrlObj),
+                options: localVarRequestOptions,
+            };
+        },
+        /**
+         * 直接返回对应图片的文件内容（`image/_*`）；若文件不存在则返回 HTTP `404`。
+         * @summary 读取记事图片
+         * @param {string} filename 图片文件名
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        getNoteImage: async (filename: string, options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
+            // verify required parameter 'filename' is not null or undefined
+            assertParamExists('getNoteImage', 'filename', filename)
+            const localVarPath = `/api/v1/notes/images/{filename}`
+                .replace('{filename}', encodeURIComponent(String(filename)));
+            // use dummy base URL string because the URL constructor only accepts absolute URLs.
+            const localVarUrlObj = new URL(localVarPath, DUMMY_BASE_URL);
+            let baseOptions;
+            if (configuration) {
+                baseOptions = configuration.baseOptions;
+            }
+
+            const localVarRequestOptions = { method: 'GET', ...baseOptions, ...options};
+            const localVarHeaderParameter = {} as any;
+            const localVarQueryParameter = {} as any;
+
+            localVarHeaderParameter['Accept'] = 'image/*';
+
+            setSearchParams(localVarUrlObj, localVarQueryParameter);
+            let headersFromBaseOptions = baseOptions && baseOptions.headers ? baseOptions.headers : {};
+            localVarRequestOptions.headers = {...localVarHeaderParameter, ...headersFromBaseOptions, ...options.headers};
+
+            return {
+                url: toPathString(localVarUrlObj),
+                options: localVarRequestOptions,
+            };
+        },
+        /**
+         * 返回全部记事页签，按 `sort_order ASC, id ASC` 排序。
+         * @summary 获取记事页签列表
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        listNotes: async (options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
+            const localVarPath = `/api/v1/notes`;
+            // use dummy base URL string because the URL constructor only accepts absolute URLs.
+            const localVarUrlObj = new URL(localVarPath, DUMMY_BASE_URL);
+            let baseOptions;
+            if (configuration) {
+                baseOptions = configuration.baseOptions;
+            }
+
+            const localVarRequestOptions = { method: 'GET', ...baseOptions, ...options};
+            const localVarHeaderParameter = {} as any;
+            const localVarQueryParameter = {} as any;
+
+            localVarHeaderParameter['Accept'] = 'application/json';
+
+            setSearchParams(localVarUrlObj, localVarQueryParameter);
+            let headersFromBaseOptions = baseOptions && baseOptions.headers ? baseOptions.headers : {};
+            localVarRequestOptions.headers = {...localVarHeaderParameter, ...headersFromBaseOptions, ...options.headers};
+
+            return {
+                url: toPathString(localVarUrlObj),
+                options: localVarRequestOptions,
+            };
+        },
+        /**
+         * 全量更新指定记事页签的标题、Markdown 正文与排序权重。
+         * @summary 更新记事页签
+         * @param {number} id 记事页签 ID
+         * @param {UpdateNoteRequest} updateNoteRequest 
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        updateNote: async (id: number, updateNoteRequest: UpdateNoteRequest, options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
+            // verify required parameter 'id' is not null or undefined
+            assertParamExists('updateNote', 'id', id)
+            // verify required parameter 'updateNoteRequest' is not null or undefined
+            assertParamExists('updateNote', 'updateNoteRequest', updateNoteRequest)
+            const localVarPath = `/api/v1/notes/{id}`
+                .replace('{id}', encodeURIComponent(String(id)));
+            // use dummy base URL string because the URL constructor only accepts absolute URLs.
+            const localVarUrlObj = new URL(localVarPath, DUMMY_BASE_URL);
+            let baseOptions;
+            if (configuration) {
+                baseOptions = configuration.baseOptions;
+            }
+
+            const localVarRequestOptions = { method: 'PUT', ...baseOptions, ...options};
+            const localVarHeaderParameter = {} as any;
+            const localVarQueryParameter = {} as any;
+
+            localVarHeaderParameter['Content-Type'] = 'application/json';
+            localVarHeaderParameter['Accept'] = 'application/json';
+
+            setSearchParams(localVarUrlObj, localVarQueryParameter);
+            let headersFromBaseOptions = baseOptions && baseOptions.headers ? baseOptions.headers : {};
+            localVarRequestOptions.headers = {...localVarHeaderParameter, ...headersFromBaseOptions, ...options.headers};
+            localVarRequestOptions.data = serializeDataIfNeeded(updateNoteRequest, localVarRequestOptions, configuration)
+
+            return {
+                url: toPathString(localVarUrlObj),
+                options: localVarRequestOptions,
+            };
+        },
+        /**
+         * 上传单张图片（支持 `.png`、`.jpg`、`.jpeg`、`.gif`、`.webp`、`.svg`、`.bmp`、`.ico`、`.avif`），落盘至服务端配置的 `image_dir` 目录并返回访问 URL。
+         * @summary 上传记事图片
+         * @param {File} file 图片文件
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        uploadNoteImage: async (file: File, options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
+            // verify required parameter 'file' is not null or undefined
+            assertParamExists('uploadNoteImage', 'file', file)
+            const localVarPath = `/api/v1/notes/images`;
+            // use dummy base URL string because the URL constructor only accepts absolute URLs.
+            const localVarUrlObj = new URL(localVarPath, DUMMY_BASE_URL);
+            let baseOptions;
+            if (configuration) {
+                baseOptions = configuration.baseOptions;
+            }
+
+            const localVarRequestOptions = { method: 'POST', ...baseOptions, ...options};
+            const localVarHeaderParameter = {} as any;
+            const localVarQueryParameter = {} as any;
+            const localVarFormParams = new ((configuration && configuration.formDataCtor) || FormData)();
+
+
+            if (file !== undefined) { 
+                localVarFormParams.append('file', file as any);
+            }
+            localVarHeaderParameter['Content-Type'] = 'multipart/form-data';
+            localVarHeaderParameter['Accept'] = 'application/json';
+
+            setSearchParams(localVarUrlObj, localVarQueryParameter);
+            let headersFromBaseOptions = baseOptions && baseOptions.headers ? baseOptions.headers : {};
+            localVarRequestOptions.headers = {...localVarHeaderParameter, ...headersFromBaseOptions, ...options.headers};
+            localVarRequestOptions.data = localVarFormParams;
+
+            return {
+                url: toPathString(localVarUrlObj),
+                options: localVarRequestOptions,
+            };
+        },
+    }
+};
+
+/**
+ * NotesApi - functional programming interface
+ */
+export const NotesApiFp = function(configuration?: Configuration) {
+    const localVarAxiosParamCreator = NotesApiAxiosParamCreator(configuration)
+    return {
+        /**
+         * 
+         * @summary 新建记事页签
+         * @param {CreateNoteRequest} createNoteRequest 
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        async createNote(createNoteRequest: CreateNoteRequest, options?: RawAxiosRequestConfig): Promise<(axios?: AxiosInstance, basePath?: string) => AxiosPromise<CreateNote200Response>> {
+            const localVarAxiosArgs = await localVarAxiosParamCreator.createNote(createNoteRequest, options);
+            const localVarOperationServerIndex = configuration?.serverIndex ?? 0;
+            const localVarOperationServerBasePath = operationServerMap['NotesApi.createNote']?.[localVarOperationServerIndex]?.url;
+            return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
+        },
+        /**
+         * 
+         * @summary 删除记事页签
+         * @param {number} id 记事页签 ID
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        async deleteNote(id: number, options?: RawAxiosRequestConfig): Promise<(axios?: AxiosInstance, basePath?: string) => AxiosPromise<DeleteNote200Response>> {
+            const localVarAxiosArgs = await localVarAxiosParamCreator.deleteNote(id, options);
+            const localVarOperationServerIndex = configuration?.serverIndex ?? 0;
+            const localVarOperationServerBasePath = operationServerMap['NotesApi.deleteNote']?.[localVarOperationServerIndex]?.url;
+            return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
+        },
+        /**
+         * 直接返回对应图片的文件内容（`image/_*`）；若文件不存在则返回 HTTP `404`。
+         * @summary 读取记事图片
+         * @param {string} filename 图片文件名
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        async getNoteImage(filename: string, options?: RawAxiosRequestConfig): Promise<(axios?: AxiosInstance, basePath?: string) => AxiosPromise<File>> {
+            const localVarAxiosArgs = await localVarAxiosParamCreator.getNoteImage(filename, options);
+            const localVarOperationServerIndex = configuration?.serverIndex ?? 0;
+            const localVarOperationServerBasePath = operationServerMap['NotesApi.getNoteImage']?.[localVarOperationServerIndex]?.url;
+            return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
+        },
+        /**
+         * 返回全部记事页签，按 `sort_order ASC, id ASC` 排序。
+         * @summary 获取记事页签列表
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        async listNotes(options?: RawAxiosRequestConfig): Promise<(axios?: AxiosInstance, basePath?: string) => AxiosPromise<ListNotes200Response>> {
+            const localVarAxiosArgs = await localVarAxiosParamCreator.listNotes(options);
+            const localVarOperationServerIndex = configuration?.serverIndex ?? 0;
+            const localVarOperationServerBasePath = operationServerMap['NotesApi.listNotes']?.[localVarOperationServerIndex]?.url;
+            return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
+        },
+        /**
+         * 全量更新指定记事页签的标题、Markdown 正文与排序权重。
+         * @summary 更新记事页签
+         * @param {number} id 记事页签 ID
+         * @param {UpdateNoteRequest} updateNoteRequest 
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        async updateNote(id: number, updateNoteRequest: UpdateNoteRequest, options?: RawAxiosRequestConfig): Promise<(axios?: AxiosInstance, basePath?: string) => AxiosPromise<CreateNote200Response>> {
+            const localVarAxiosArgs = await localVarAxiosParamCreator.updateNote(id, updateNoteRequest, options);
+            const localVarOperationServerIndex = configuration?.serverIndex ?? 0;
+            const localVarOperationServerBasePath = operationServerMap['NotesApi.updateNote']?.[localVarOperationServerIndex]?.url;
+            return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
+        },
+        /**
+         * 上传单张图片（支持 `.png`、`.jpg`、`.jpeg`、`.gif`、`.webp`、`.svg`、`.bmp`、`.ico`、`.avif`），落盘至服务端配置的 `image_dir` 目录并返回访问 URL。
+         * @summary 上传记事图片
+         * @param {File} file 图片文件
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        async uploadNoteImage(file: File, options?: RawAxiosRequestConfig): Promise<(axios?: AxiosInstance, basePath?: string) => AxiosPromise<UploadNoteImage200Response>> {
+            const localVarAxiosArgs = await localVarAxiosParamCreator.uploadNoteImage(file, options);
+            const localVarOperationServerIndex = configuration?.serverIndex ?? 0;
+            const localVarOperationServerBasePath = operationServerMap['NotesApi.uploadNoteImage']?.[localVarOperationServerIndex]?.url;
+            return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
+        },
+    }
+};
+
+/**
+ * NotesApi - factory interface
+ */
+export const NotesApiFactory = function (configuration?: Configuration, basePath?: string, axios?: AxiosInstance) {
+    const localVarFp = NotesApiFp(configuration)
+    return {
+        /**
+         * 
+         * @summary 新建记事页签
+         * @param {NotesApiCreateNoteRequest} requestParameters Request parameters.
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        createNote(requestParameters: NotesApiCreateNoteRequest, options?: RawAxiosRequestConfig): AxiosPromise<CreateNote200Response> {
+            return localVarFp.createNote(requestParameters.createNoteRequest, options).then((request) => request(axios, basePath));
+        },
+        /**
+         * 
+         * @summary 删除记事页签
+         * @param {NotesApiDeleteNoteRequest} requestParameters Request parameters.
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        deleteNote(requestParameters: NotesApiDeleteNoteRequest, options?: RawAxiosRequestConfig): AxiosPromise<DeleteNote200Response> {
+            return localVarFp.deleteNote(requestParameters.id, options).then((request) => request(axios, basePath));
+        },
+        /**
+         * 直接返回对应图片的文件内容（`image/_*`）；若文件不存在则返回 HTTP `404`。
+         * @summary 读取记事图片
+         * @param {NotesApiGetNoteImageRequest} requestParameters Request parameters.
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        getNoteImage(requestParameters: NotesApiGetNoteImageRequest, options?: RawAxiosRequestConfig): AxiosPromise<File> {
+            return localVarFp.getNoteImage(requestParameters.filename, options).then((request) => request(axios, basePath));
+        },
+        /**
+         * 返回全部记事页签，按 `sort_order ASC, id ASC` 排序。
+         * @summary 获取记事页签列表
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        listNotes(options?: RawAxiosRequestConfig): AxiosPromise<ListNotes200Response> {
+            return localVarFp.listNotes(options).then((request) => request(axios, basePath));
+        },
+        /**
+         * 全量更新指定记事页签的标题、Markdown 正文与排序权重。
+         * @summary 更新记事页签
+         * @param {NotesApiUpdateNoteRequest} requestParameters Request parameters.
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        updateNote(requestParameters: NotesApiUpdateNoteRequest, options?: RawAxiosRequestConfig): AxiosPromise<CreateNote200Response> {
+            return localVarFp.updateNote(requestParameters.id, requestParameters.updateNoteRequest, options).then((request) => request(axios, basePath));
+        },
+        /**
+         * 上传单张图片（支持 `.png`、`.jpg`、`.jpeg`、`.gif`、`.webp`、`.svg`、`.bmp`、`.ico`、`.avif`），落盘至服务端配置的 `image_dir` 目录并返回访问 URL。
+         * @summary 上传记事图片
+         * @param {NotesApiUploadNoteImageRequest} requestParameters Request parameters.
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        uploadNoteImage(requestParameters: NotesApiUploadNoteImageRequest, options?: RawAxiosRequestConfig): AxiosPromise<UploadNoteImage200Response> {
+            return localVarFp.uploadNoteImage(requestParameters.file, options).then((request) => request(axios, basePath));
+        },
+    };
+};
+
+/**
+ * Request parameters for createNote operation in NotesApi.
+ */
+export interface NotesApiCreateNoteRequest {
+    readonly createNoteRequest: CreateNoteRequest
+}
+
+/**
+ * Request parameters for deleteNote operation in NotesApi.
+ */
+export interface NotesApiDeleteNoteRequest {
+    /**
+     * 记事页签 ID
+     */
+    readonly id: number
+}
+
+/**
+ * Request parameters for getNoteImage operation in NotesApi.
+ */
+export interface NotesApiGetNoteImageRequest {
+    /**
+     * 图片文件名
+     */
+    readonly filename: string
+}
+
+/**
+ * Request parameters for updateNote operation in NotesApi.
+ */
+export interface NotesApiUpdateNoteRequest {
+    /**
+     * 记事页签 ID
+     */
+    readonly id: number
+
+    readonly updateNoteRequest: UpdateNoteRequest
+}
+
+/**
+ * Request parameters for uploadNoteImage operation in NotesApi.
+ */
+export interface NotesApiUploadNoteImageRequest {
+    /**
+     * 图片文件
+     */
+    readonly file: File
+}
+
+/**
+ * NotesApi - object-oriented interface
+ */
+export class NotesApi extends BaseAPI {
+    /**
+     * 
+     * @summary 新建记事页签
+     * @param {NotesApiCreateNoteRequest} requestParameters Request parameters.
+     * @param {*} [options] Override http request option.
+     * @throws {RequiredError}
+     */
+    public createNote(requestParameters: NotesApiCreateNoteRequest, options?: RawAxiosRequestConfig) {
+        return NotesApiFp(this.configuration).createNote(requestParameters.createNoteRequest, options).then((request) => request(this.axios, this.basePath));
+    }
+
+    /**
+     * 
+     * @summary 删除记事页签
+     * @param {NotesApiDeleteNoteRequest} requestParameters Request parameters.
+     * @param {*} [options] Override http request option.
+     * @throws {RequiredError}
+     */
+    public deleteNote(requestParameters: NotesApiDeleteNoteRequest, options?: RawAxiosRequestConfig) {
+        return NotesApiFp(this.configuration).deleteNote(requestParameters.id, options).then((request) => request(this.axios, this.basePath));
+    }
+
+    /**
+     * 直接返回对应图片的文件内容（`image/_*`）；若文件不存在则返回 HTTP `404`。
+     * @summary 读取记事图片
+     * @param {NotesApiGetNoteImageRequest} requestParameters Request parameters.
+     * @param {*} [options] Override http request option.
+     * @throws {RequiredError}
+     */
+    public getNoteImage(requestParameters: NotesApiGetNoteImageRequest, options?: RawAxiosRequestConfig) {
+        return NotesApiFp(this.configuration).getNoteImage(requestParameters.filename, options).then((request) => request(this.axios, this.basePath));
+    }
+
+    /**
+     * 返回全部记事页签，按 `sort_order ASC, id ASC` 排序。
+     * @summary 获取记事页签列表
+     * @param {*} [options] Override http request option.
+     * @throws {RequiredError}
+     */
+    public listNotes(options?: RawAxiosRequestConfig) {
+        return NotesApiFp(this.configuration).listNotes(options).then((request) => request(this.axios, this.basePath));
+    }
+
+    /**
+     * 全量更新指定记事页签的标题、Markdown 正文与排序权重。
+     * @summary 更新记事页签
+     * @param {NotesApiUpdateNoteRequest} requestParameters Request parameters.
+     * @param {*} [options] Override http request option.
+     * @throws {RequiredError}
+     */
+    public updateNote(requestParameters: NotesApiUpdateNoteRequest, options?: RawAxiosRequestConfig) {
+        return NotesApiFp(this.configuration).updateNote(requestParameters.id, requestParameters.updateNoteRequest, options).then((request) => request(this.axios, this.basePath));
+    }
+
+    /**
+     * 上传单张图片（支持 `.png`、`.jpg`、`.jpeg`、`.gif`、`.webp`、`.svg`、`.bmp`、`.ico`、`.avif`），落盘至服务端配置的 `image_dir` 目录并返回访问 URL。
+     * @summary 上传记事图片
+     * @param {NotesApiUploadNoteImageRequest} requestParameters Request parameters.
+     * @param {*} [options] Override http request option.
+     * @throws {RequiredError}
+     */
+    public uploadNoteImage(requestParameters: NotesApiUploadNoteImageRequest, options?: RawAxiosRequestConfig) {
+        return NotesApiFp(this.configuration).uploadNoteImage(requestParameters.file, options).then((request) => request(this.axios, this.basePath));
+    }
+}
+
 
 
 /**
