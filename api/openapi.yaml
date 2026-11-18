@@ -3,14 +3,16 @@ info:
     title: Go-Schedule API
     version: 0.1.0
     description: |
-        练习用日程服务 API。
+        练习用日程与记事板服务 API。
 
         统一响应约定：
-        - 所有接口的 HTTP 状态码固定为 `200`；
+        - 所有 JSON 接口的 HTTP 状态码固定为 `200`；
         - 业务状态由响应 JSON 中的 `code` 字段表示：`200` 成功、`400` 参数错误、`404` 资源不存在、`500` 服务器内部错误；
-        - 响应体统一为 `{"code": xxx, "data": ...}`；
+        - JSON 响应体统一为 `{"code": xxx, "data": ...}`；
         - 成功时 `data` 为业务数据，失败时 `data` 为 `{"message": "..."}`；
-        - 列表按规则排序：未完成在前、开始时间升序、开始时间相同时优先级降序。
+        - 图片读取接口（`GET /api/v1/notes/images/{filename}`）直接返回图片文件流（`image/*`），文件不存在时返回 HTTP `404`；
+        - 日程列表按规则排序：未完成在前、开始时间升序、开始时间相同时优先级降序；
+        - 记事页签列表按规则排序：`sort_order` 升序、`id` 升序。
 
         日程使用统一的 `Schedule` 结构，由 `type` 决定哪些字段生效：
         - `one_time`：只使用 `happen_time`；
@@ -25,6 +27,8 @@ servers:
 tags:
     - name: schedules
       description: 日程的增删改查
+    - name: notes
+      description: 多页签 Markdown 记事板及图片上传读取
 
 paths:
     /api/v1/schedules:
@@ -197,6 +201,200 @@ paths:
                                         data:
                                             message: 日程不存在
 
+    /api/v1/notes:
+        get:
+            tags: [notes]
+            operationId: listNotes
+            summary: 获取记事页签列表
+            description: 返回全部记事页签，按 `sort_order ASC, id ASC` 排序。
+            responses:
+                "200":
+                    description: 成功时 `data` 为记事页签数组；失败时 `data` 为错误详情
+                    content:
+                        application/json:
+                            schema:
+                                oneOf:
+                                    - $ref: "#/components/schemas/NoteListResponse"
+                                    - $ref: "#/components/schemas/ErrorResponse"
+                            examples:
+                                success:
+                                    value:
+                                        code: 200
+                                        data:
+                                            - id: 1
+                                              title: 日常备忘
+                                              content: "# 待办事项\n- 整理周报"
+                                              sort_order: 0
+                                              created_at: "2026-11-18T08:00:00Z"
+                                              updated_at: "2026-11-18T08:30:00Z"
+                                internalError:
+                                    value:
+                                        code: 500
+                                        data:
+                                            message: 服务器内部错误
+
+        post:
+            tags: [notes]
+            operationId: createNote
+            summary: 新建记事页签
+            requestBody:
+                required: true
+                content:
+                    application/json:
+                        schema:
+                            $ref: "#/components/schemas/CreateNoteRequest"
+            responses:
+                "200":
+                    description: 成功时 `data` 为新建的记事页签；参数错误时 `code=400`
+                    content:
+                        application/json:
+                            schema:
+                                oneOf:
+                                    - $ref: "#/components/schemas/NoteResponse"
+                                    - $ref: "#/components/schemas/ErrorResponse"
+                            examples:
+                                success:
+                                    value:
+                                        code: 200
+                                        data:
+                                            id: 1
+                                            title: 日常备忘
+                                            content: ""
+                                            sort_order: 0
+                                            created_at: "2026-11-18T08:00:00Z"
+                                            updated_at: "2026-11-18T08:00:00Z"
+                                invalidRequest:
+                                    value:
+                                        code: 400
+                                        data:
+                                            message: title 不能为空
+
+    /api/v1/notes/{id}:
+        put:
+            tags: [notes]
+            operationId: updateNote
+            summary: 更新记事页签
+            description: 全量更新指定记事页签的标题、Markdown 正文与排序权重。
+            parameters:
+                - $ref: "#/components/parameters/NoteId"
+            requestBody:
+                required: true
+                content:
+                    application/json:
+                        schema:
+                            $ref: "#/components/schemas/UpdateNoteRequest"
+            responses:
+                "200":
+                    description: 成功时 `data` 为更新后的记事页签；参数错误或资源不存在时返回对应 `code`
+                    content:
+                        application/json:
+                            schema:
+                                oneOf:
+                                    - $ref: "#/components/schemas/NoteResponse"
+                                    - $ref: "#/components/schemas/ErrorResponse"
+                            examples:
+                                success:
+                                    value:
+                                        code: 200
+                                        data:
+                                            id: 1
+                                            title: 日常备忘
+                                            content: "# 标题\n正文内容..."
+                                            sort_order: 0
+                                            created_at: "2026-11-18T08:00:00Z"
+                                            updated_at: "2026-11-18T09:15:00Z"
+                                notFound:
+                                    value:
+                                        code: 404
+                                        data:
+                                            message: 记事页签不存在
+
+        delete:
+            tags: [notes]
+            operationId: deleteNote
+            summary: 删除记事页签
+            parameters:
+                - $ref: "#/components/parameters/NoteId"
+            responses:
+                "200":
+                    description: 成功时 `data` 为被删除记事页签的 ID
+                    content:
+                        application/json:
+                            schema:
+                                oneOf:
+                                    - $ref: "#/components/schemas/DeleteNoteResponse"
+                                    - $ref: "#/components/schemas/ErrorResponse"
+                            examples:
+                                success:
+                                    value:
+                                        code: 200
+                                        data:
+                                            id: 1
+                                notFound:
+                                    value:
+                                        code: 404
+                                        data:
+                                            message: 记事页签不存在
+
+    /api/v1/notes/images:
+        post:
+            tags: [notes]
+            operationId: uploadNoteImage
+            summary: 上传记事图片
+            description: 上传单张图片（支持 `.png`、`.jpg`、`.jpeg`、`.gif`、`.webp`、`.svg`、`.bmp`、`.ico`、`.avif`），落盘至服务端配置的 `image_dir` 目录并返回访问 URL。
+            requestBody:
+                required: true
+                content:
+                    multipart/form-data:
+                        schema:
+                            type: object
+                            required: [file]
+                            properties:
+                                file:
+                                    type: string
+                                    format: binary
+                                    description: 图片文件
+            responses:
+                "200":
+                    description: 成功时 `data` 为图片文件名与访问 URL；参数错误时 `code=400`
+                    content:
+                        application/json:
+                            schema:
+                                oneOf:
+                                    - $ref: "#/components/schemas/NoteImageUploadResponse"
+                                    - $ref: "#/components/schemas/ErrorResponse"
+                            examples:
+                                success:
+                                    value:
+                                        code: 200
+                                        data:
+                                            filename: 20261118_123000_a1b2c3d4.svg
+                                            url: /api/v1/notes/images/20261118_123000_a1b2c3d4.svg
+                                invalidRequest:
+                                    value:
+                                        code: 400
+                                        data:
+                                            message: 不支持的图片文件类型
+
+    /api/v1/notes/images/{filename}:
+        get:
+            tags: [notes]
+            operationId: getNoteImage
+            summary: 读取记事图片
+            description: 直接返回对应图片的文件内容（`image/*`）；若文件不存在则返回 HTTP `404`。
+            parameters:
+                - $ref: "#/components/parameters/NoteImageFilename"
+            responses:
+                "200":
+                    description: 返回图片二进制或 SVG 内容
+                    content:
+                        image/*:
+                            schema:
+                                type: string
+                                format: binary
+                "404":
+                    description: 图片文件不存在
+
 components:
     parameters:
         ScheduleId:
@@ -208,6 +406,23 @@ components:
                 type: integer
                 format: int64
                 minimum: 1
+        NoteId:
+            name: id
+            in: path
+            required: true
+            description: 记事页签 ID
+            schema:
+                type: integer
+                format: int64
+                minimum: 1
+        NoteImageFilename:
+            name: filename
+            in: path
+            required: true
+            description: 图片文件名
+            schema:
+                type: string
+                minLength: 1
 
     schemas:
         Schedule:
@@ -410,6 +625,96 @@ components:
                     required: [id]
                     properties:
                         id: { type: integer, format: int64 }
+
+        Note:
+            type: object
+            required: [id, title, content, sort_order, created_at, updated_at]
+            properties:
+                id: { type: integer, format: int64 }
+                title: { type: string, minLength: 1 }
+                content:
+                    type: string
+                    description: Markdown 正文内容（允许为空字符串）
+                sort_order:
+                    type: integer
+                    format: int32
+                    default: 0
+                    description: 页签排序权重（按升序排列）
+                created_at: { type: string, format: date-time, readOnly: true }
+                updated_at: { type: string, format: date-time, readOnly: true }
+
+        CreateNoteRequest:
+            type: object
+            required: [title]
+            properties:
+                title: { type: string, minLength: 1 }
+                content:
+                    type: string
+                    default: ""
+                    description: Markdown 正文内容（可选，默认为空字符串）
+                sort_order:
+                    type: integer
+                    format: int32
+                    default: 0
+                    description: 页签排序权重（可选，默认 0）
+
+        UpdateNoteRequest:
+            type: object
+            required: [title, content, sort_order]
+            properties:
+                title: { type: string, minLength: 1 }
+                content:
+                    type: string
+                    description: Markdown 正文内容（允许为空字符串）
+                sort_order:
+                    type: integer
+                    format: int32
+                    description: 页签排序权重
+
+        NoteResponse:
+            type: object
+            required: [code, data]
+            properties:
+                code: { type: integer, enum: [200] }
+                data: { $ref: "#/components/schemas/Note" }
+
+        NoteListResponse:
+            type: object
+            required: [code, data]
+            properties:
+                code: { type: integer, enum: [200] }
+                data:
+                    type: array
+                    items: { $ref: "#/components/schemas/Note" }
+
+        DeleteNoteResponse:
+            type: object
+            required: [code, data]
+            properties:
+                code: { type: integer, enum: [200] }
+                data:
+                    type: object
+                    required: [id]
+                    properties:
+                        id: { type: integer, format: int64 }
+
+        NoteImageData:
+            type: object
+            required: [filename, url]
+            properties:
+                filename:
+                    type: string
+                    description: 服务端生成的图片文件名
+                url:
+                    type: string
+                    description: 图片访问路径（可直接用于 Markdown 图片语法）
+
+        NoteImageUploadResponse:
+            type: object
+            required: [code, data]
+            properties:
+                code: { type: integer, enum: [200] }
+                data: { $ref: "#/components/schemas/NoteImageData" }
 
         ErrorResponse:
             type: object
