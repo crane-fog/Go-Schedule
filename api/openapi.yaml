@@ -270,45 +270,6 @@ paths:
                                             message: title 不能为空
 
     /api/v1/notes/{id}:
-        put:
-            tags: [notes]
-            operationId: updateNote
-            summary: 更新记事页签
-            description: 全量更新指定记事页签的标题、Markdown 正文与排序权重。
-            parameters:
-                - $ref: "#/components/parameters/NoteId"
-            requestBody:
-                required: true
-                content:
-                    application/json:
-                        schema:
-                            $ref: "#/components/schemas/UpdateNoteRequest"
-            responses:
-                "200":
-                    description: 成功时 `data` 为更新后的记事页签；参数错误或资源不存在时返回对应 `code`
-                    content:
-                        application/json:
-                            schema:
-                                oneOf:
-                                    - $ref: "#/components/schemas/NoteResponse"
-                                    - $ref: "#/components/schemas/ErrorResponse"
-                            examples:
-                                success:
-                                    value:
-                                        code: 200
-                                        data:
-                                            id: 1
-                                            title: 日常备忘
-                                            content: "# 标题\n正文内容..."
-                                            sort_order: 0
-                                            created_at: "2026-11-18T08:00:00Z"
-                                            updated_at: "2026-11-18T09:15:00Z"
-                                notFound:
-                                    value:
-                                        code: 404
-                                        data:
-                                            message: 记事页签不存在
-
         delete:
             tags: [notes]
             operationId: deleteNote
@@ -330,6 +291,90 @@ paths:
                                         code: 200
                                         data:
                                             id: 1
+                                notFound:
+                                    value:
+                                        code: 404
+                                        data:
+                                            message: 记事页签不存在
+
+    /api/v1/notes/{id}/meta:
+        put:
+            tags: [notes]
+            operationId: updateNoteMeta
+            summary: 更新记事页签元信息
+            description: 仅更新指定记事页签的标题（`title`）与排序权重（`sort_order`），不修改正文内容；响应中不包含 `content` 字段。
+            parameters:
+                - $ref: "#/components/parameters/NoteId"
+            requestBody:
+                required: true
+                content:
+                    application/json:
+                        schema:
+                            $ref: "#/components/schemas/UpdateNoteMetaRequest"
+            responses:
+                "200":
+                    description: 成功时 `data` 为更新后的记事页签元信息（不含 `content`）；参数错误或资源不存在时返回对应 `code`
+                    content:
+                        application/json:
+                            schema:
+                                oneOf:
+                                    - $ref: "#/components/schemas/NoteMetaResponse"
+                                    - $ref: "#/components/schemas/ErrorResponse"
+                            examples:
+                                success:
+                                    value:
+                                        code: 200
+                                        data:
+                                            id: 1
+                                            title: 日常备忘
+                                            sort_order: 1
+                                            created_at: "2026-11-18T08:00:00Z"
+                                            updated_at: "2026-11-18T09:15:00Z"
+                                invalidRequest:
+                                    value:
+                                        code: 400
+                                        data:
+                                            message: title 不能为空
+                                notFound:
+                                    value:
+                                        code: 404
+                                        data:
+                                            message: 记事页签不存在
+
+    /api/v1/notes/{id}/content:
+        put:
+            tags: [notes]
+            operationId: updateNoteContent
+            summary: 更新记事页签正文
+            description: 仅更新指定记事页签的 Markdown 正文内容（`content`），不修改标题与排序权重；响应返回全量记事页签信息。
+            parameters:
+                - $ref: "#/components/parameters/NoteId"
+            requestBody:
+                required: true
+                content:
+                    application/json:
+                        schema:
+                            $ref: "#/components/schemas/UpdateNoteContentRequest"
+            responses:
+                "200":
+                    description: 成功时 `data` 为更新后的全量记事页签；参数错误或资源不存在时返回对应 `code`
+                    content:
+                        application/json:
+                            schema:
+                                oneOf:
+                                    - $ref: "#/components/schemas/NoteResponse"
+                                    - $ref: "#/components/schemas/ErrorResponse"
+                            examples:
+                                success:
+                                    value:
+                                        code: 200
+                                        data:
+                                            id: 1
+                                            title: 日常备忘
+                                            content: "# 标题\n正文内容..."
+                                            sort_order: 0
+                                            created_at: "2026-11-18T08:00:00Z"
+                                            updated_at: "2026-11-18T09:15:00Z"
                                 notFound:
                                     value:
                                         code: 404
@@ -643,6 +688,20 @@ components:
                 created_at: { type: string, format: date-time, readOnly: true }
                 updated_at: { type: string, format: date-time, readOnly: true }
 
+        NoteMeta:
+            type: object
+            required: [id, title, sort_order, created_at, updated_at]
+            properties:
+                id: { type: integer, format: int64 }
+                title: { type: string, minLength: 1 }
+                sort_order:
+                    type: integer
+                    format: int32
+                    default: 0
+                    description: 页签排序权重（按升序排列）
+                created_at: { type: string, format: date-time, readOnly: true }
+                updated_at: { type: string, format: date-time, readOnly: true }
+
         CreateNoteRequest:
             type: object
             required: [title]
@@ -658,18 +717,23 @@ components:
                     default: 0
                     description: 页签排序权重（可选，默认 0）
 
-        UpdateNoteRequest:
+        UpdateNoteMetaRequest:
             type: object
-            required: [title, content, sort_order]
+            required: [title, sort_order]
             properties:
                 title: { type: string, minLength: 1 }
-                content:
-                    type: string
-                    description: Markdown 正文内容（允许为空字符串）
                 sort_order:
                     type: integer
                     format: int32
                     description: 页签排序权重
+
+        UpdateNoteContentRequest:
+            type: object
+            required: [content]
+            properties:
+                content:
+                    type: string
+                    description: Markdown 正文内容（允许为空字符串）
 
         NoteResponse:
             type: object
@@ -677,6 +741,13 @@ components:
             properties:
                 code: { type: integer, enum: [200] }
                 data: { $ref: "#/components/schemas/Note" }
+
+        NoteMetaResponse:
+            type: object
+            required: [code, data]
+            properties:
+                code: { type: integer, enum: [200] }
+                data: { $ref: "#/components/schemas/NoteMeta" }
 
         NoteListResponse:
             type: object
