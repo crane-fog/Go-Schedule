@@ -1,0 +1,16 @@
+[Unit]
+Description=Go Schedule Service
+After=network.target
+
+[Service]
+Type=simple
+User=deploy
+Group=deploy
+WorkingDirectory=/var/www/go-schedule/backend
+Environment="GIN_MODE=release"
+ExecStart=/var/www/go-schedule/backend/server
+Restart=on-failure
+RestartSec=5s
+
+[Install]
+WantedBy=multi-user.target
