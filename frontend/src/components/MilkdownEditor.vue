@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import {
   Editor,
   defaultValueCtx,
@@ -22,10 +22,12 @@ import { getMarkdown, replaceAll } from '@milkdown/kit/utils'
 import '@milkdown/kit/prose/view/style/prosemirror.css'
 import '@milkdown/kit/prose/tables/style/tables.css'
 import { extractErrorMessage } from '@/api/client'
+import { DEFAULT_EDITOR_ZOOM, useEditorZoom } from '@/composables/use-editor-zoom'
 import { resizableImageView } from '@/utils/milkdown-image-resize'
 import { configureTextColor, textColorPlugins } from '@/utils/milkdown-text-color'
 
 const IMAGE_EXT_PATTERN = /\.(?:png|jpe?g|gif|webp|svg|bmp|ico|avif)$/i
+const ZOOM_BADGE_HIDE_DELAY_MS = 1100
 
 const { modelValue, noteId, uploadImage } = defineProps<{
   modelValue: string
@@ -39,13 +41,40 @@ const emit = defineEmits<{
   'upload-error': [message: string]
 }>()
 
-const editorRootRef = ref<HTMLElement | undefined>(undefined)
+const zoom = defineModel<number>('zoom', { default: DEFAULT_EDITOR_ZOOM })
 
+const editorRootRef = ref<HTMLElement | undefined>(undefined)
+const zoomBadgeVisible = ref(false)
+const zoomPercent = computed(() => Math.round(zoom.value * 100))
+
+let zoomBadgeTimer: ReturnType<typeof setTimeout> | undefined = undefined
 let editorInstance: Editor | undefined = undefined
 let editorReady = false
 let destroyed = false
 let suppressUpdate = false
 let lastEmittedMarkdown = modelValue
+
+function showZoomBadge(): void {
+  zoomBadgeVisible.value = true
+  if (zoomBadgeTimer !== undefined) {
+    clearTimeout(zoomBadgeTimer)
+  }
+  zoomBadgeTimer = setTimeout(() => {
+    zoomBadgeVisible.value = false
+    zoomBadgeTimer = undefined
+  }, ZOOM_BADGE_HIDE_DELAY_MS)
+}
+
+useEditorZoom({
+  containerRef: editorRootRef,
+  zoom,
+})
+
+watch(zoom, (nextZoom, prevZoom) => {
+  if (nextZoom !== prevZoom) {
+    showZoomBadge()
+  }
+})
 
 function isSupportedImageFile(file: File): boolean {
   return file.type.startsWith('image/') || IMAGE_EXT_PATTERN.test(file.name)
@@ -224,6 +253,10 @@ onMounted(async () => {
 onBeforeUnmount(() => {
   destroyed = true
   editorReady = false
+  if (zoomBadgeTimer !== undefined) {
+    clearTimeout(zoomBadgeTimer)
+    zoomBadgeTimer = undefined
+  }
   if (editorInstance) {
     void editorInstance.destroy()
     editorInstance = undefined
@@ -239,12 +272,21 @@ defineExpose({
 
 <template>
   <div class="milkdown-shell" @keydown="handleEditorKeydown">
-    <div ref="editorRootRef" class="milkdown-host" @click.self="focusEditor" />
+    <div
+      ref="editorRootRef"
+      class="milkdown-host"
+      :style="{ '--editor-zoom': String(zoom) }"
+      @click.self="focusEditor"
+    />
+    <Transition name="zoom-badge-fade">
+      <div v-if="zoomBadgeVisible" class="zoom-badge" aria-live="polite">{{ zoomPercent }}%</div>
+    </Transition>
   </div>
 </template>
 
 <style scoped>
 .milkdown-shell {
+  position: relative;
   flex: 1;
   min-height: 0;
   display: flex;
@@ -258,16 +300,45 @@ defineExpose({
 .milkdown-host {
   flex: 1;
   min-height: 0;
-  overflow-y: auto;
+  overflow: auto;
   display: flex;
   flex-direction: column;
   cursor: text;
+  touch-action: pan-x pan-y;
 }
 
 .milkdown-host :deep(.milkdown) {
   flex: 1 0 auto;
   display: flex;
   flex-direction: column;
+  zoom: var(--editor-zoom, 1);
+}
+
+.zoom-badge {
+  position: absolute;
+  right: 0.9rem;
+  bottom: 0.9rem;
+  padding: 0.25rem 0.6rem;
+  border-radius: 999px;
+  background: var(--surface-muted);
+  border: 1px solid var(--border-strong);
+  color: var(--text-primary);
+  font-size: 0.78rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  pointer-events: none;
+  user-select: none;
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.12);
+}
+
+.zoom-badge-fade-enter-active,
+.zoom-badge-fade-leave-active {
+  transition: opacity 0.18s ease;
+}
+
+.zoom-badge-fade-enter-from,
+.zoom-badge-fade-leave-to {
+  opacity: 0;
 }
 
 .milkdown-host :deep(.milkdown-prosemirror) {

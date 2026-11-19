@@ -28,6 +28,7 @@ interface ResizeSession {
   startWidth: number
   startX: number
   startY: number
+  zoomScale: number
 }
 
 export function clampImageWidth(width: number, maxWidth: number): number {
@@ -77,11 +78,11 @@ function getAvailableMaxWidth(wrapper: HTMLElement): number {
 }
 
 function computeNextWidth(session: ResizeSession, event: PointerEvent): number {
-  const dx = event.clientX - session.startX
+  const dx = (event.clientX - session.startX) / session.zoomScale
   if (session.dir === 'right' || session.startHeight <= 0) {
     return clampImageWidth(session.startWidth + dx, session.maxWidth)
   }
-  const dy = event.clientY - session.startY
+  const dy = (event.clientY - session.startY) / session.zoomScale
   const widthFromX = session.startWidth + dx
   const widthFromY = (session.startHeight + dy) * (session.startWidth / session.startHeight)
   let rawWidth = widthFromY
@@ -230,16 +231,20 @@ function createResizableImageNodeView(
     if (rect.width <= 0) {
       return
     }
+    const startWidth = img.offsetWidth || rect.width
+    const startHeight = img.offsetHeight || rect.height
+    const zoomScale = rect.width / startWidth || 1
 
     session = {
-      currentWidth: Math.round(rect.width),
+      currentWidth: Math.round(startWidth),
       dir,
       maxWidth: getAvailableMaxWidth(wrapper),
       moved: false,
-      startHeight: rect.height,
-      startWidth: rect.width,
+      startHeight,
+      startWidth,
       startX: event.clientX,
       startY: event.clientY,
+      zoomScale,
     }
     prevBodyCursor = document.body.style.cursor
     prevBodyUserSelect = document.body.style.userSelect

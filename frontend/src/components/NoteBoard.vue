@@ -2,9 +2,12 @@
 import { nextTick, ref } from 'vue'
 import type { Note } from '@/api'
 import MilkdownEditor from '@/components/MilkdownEditor.vue'
+import { DEFAULT_EDITOR_ZOOM } from '@/composables/use-editor-zoom'
 import { useNoteStore, type TabDropPlacement } from '@/stores/note'
 
 const DRAG_MIME_TYPE = 'application/x-go-schedule-note-id'
+
+const zoom = defineModel<number>('zoom', { default: DEFAULT_EDITOR_ZOOM })
 
 const store = useNoteStore()
 
@@ -331,6 +334,7 @@ defineExpose({
       <div v-if="store.activeNote" class="note-workspace">
         <MilkdownEditor
           ref="editorRef"
+          v-model:zoom="zoom"
           :note-id="store.activeNote.id"
           :model-value="store.activeNote.content"
           :upload-image="store.uploadImage"

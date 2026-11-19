@@ -6,6 +6,7 @@ import ScheduleCard from '@/components/ScheduleCard.vue'
 import ScheduleFormModal from '@/components/ScheduleFormModal.vue'
 import ScheduleToolbar from '@/components/ScheduleToolbar.vue'
 import TimeRangeConnectors from '@/components/TimeRangeConnectors.vue'
+import { DEFAULT_EDITOR_ZOOM } from '@/composables/use-editor-zoom'
 import { useInfiniteScroll } from '@/composables/use-infinite-scroll'
 import { useNoteStore } from '@/stores/note'
 import { useScheduleStore } from '@/stores/schedule'
@@ -18,6 +19,7 @@ const noteStore = useNoteStore()
 
 const activeView = ref<MainViewMode>('schedules')
 const noteBoardRef = ref<InstanceType<typeof NoteBoard> | undefined>(undefined)
+const noteEditorZoom = ref(DEFAULT_EDITOR_ZOOM)
 
 const modalVisible = ref(false)
 const editingSchedule = ref<Schedule | undefined>(undefined)
@@ -50,6 +52,10 @@ async function switchMainView(mode: MainViewMode): Promise<void> {
   if (mode === 'notes' && !noteStore.loaded) {
     await noteStore.loadNotes()
   }
+}
+
+function handleResetNoteZoom(): void {
+  noteEditorZoom.value = DEFAULT_EDITOR_ZOOM
 }
 
 async function handleSaveActiveNote(): Promise<void> {
@@ -195,6 +201,14 @@ onBeforeUnmount(() => {
         <button
           type="button"
           class="btn btn-secondary"
+          :title="`重置编辑框缩放（当前 ${Math.round(noteEditorZoom * 100)}%）`"
+          @click="handleResetNoteZoom"
+        >
+          重置缩放
+        </button>
+        <button
+          type="button"
+          class="btn btn-secondary"
           :disabled="noteStore.loading"
           @click="handleRefreshNotes"
         >
@@ -293,7 +307,7 @@ onBeforeUnmount(() => {
       />
     </template>
 
-    <NoteBoard v-else ref="noteBoardRef" />
+    <NoteBoard v-else ref="noteBoardRef" v-model:zoom="noteEditorZoom" />
   </main>
 </template>
 
