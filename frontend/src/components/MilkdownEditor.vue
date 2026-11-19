@@ -23,6 +23,7 @@ import '@milkdown/kit/prose/view/style/prosemirror.css'
 import '@milkdown/kit/prose/tables/style/tables.css'
 import { extractErrorMessage } from '@/api/client'
 import { resizableImageView } from '@/utils/milkdown-image-resize'
+import { configureTextColor, textColorPlugins } from '@/utils/milkdown-text-color'
 
 const IMAGE_EXT_PATTERN = /\.(?:png|jpe?g|gif|webp|svg|bmp|ico|avif)$/i
 
@@ -125,6 +126,8 @@ function configureEditor(ctx: Ctx, root: HTMLElement): void {
     lastEmittedMarkdown = markdown
     emit('update:modelValue', markdown)
   })
+
+  configureTextColor(ctx)
 }
 
 function getCurrentMarkdown(): string {
@@ -199,6 +202,7 @@ onMounted(async () => {
     .config((ctx) => configureEditor(ctx, root))
     .use(commonmark)
     .use(resizableImageView)
+    .use(textColorPlugins)
     .use(gfm)
     .use(history)
     .use(clipboard)
@@ -321,6 +325,27 @@ defineExpose({
   text-underline-offset: 2px;
 }
 
+.milkdown-host :deep(.milkdown-prosemirror .milkdown-text-color[data-color='red']) {
+  color: var(--note-color-red);
+}
+
+.milkdown-host :deep(.milkdown-prosemirror .milkdown-text-color[data-color='green']) {
+  color: var(--note-color-green);
+}
+
+.milkdown-host :deep(.milkdown-prosemirror .milkdown-text-color[data-color='blue']) {
+  color: var(--note-color-blue);
+}
+
+.milkdown-host :deep(.milkdown-prosemirror .milkdown-text-color[data-color='yellow']) {
+  color: var(--note-color-yellow);
+}
+
+.milkdown-host :deep(.milkdown-prosemirror .milkdown-text-color a),
+.milkdown-host :deep(.milkdown-prosemirror .milkdown-text-color code) {
+  color: inherit;
+}
+
 .milkdown-host :deep(.milkdown-prosemirror ul),
 .milkdown-host :deep(.milkdown-prosemirror ol) {
   padding-left: 1.5rem;
@@ -398,8 +423,16 @@ defineExpose({
 
 .milkdown-host :deep(.milkdown-prosemirror hr) {
   border: none;
-  border-top: 1px solid var(--border-color);
-  margin: 1.15rem 0;
+  height: 2px;
+  border-radius: 999px;
+  background: var(--border-hover);
+  margin: 1.4rem 0;
+}
+
+.milkdown-host :deep(.milkdown-prosemirror hr.ProseMirror-selectednode) {
+  background: var(--primary-color);
+  outline: 2px solid var(--primary-color);
+  outline-offset: 2px;
 }
 
 .milkdown-host :deep(.milkdown-prosemirror table) {

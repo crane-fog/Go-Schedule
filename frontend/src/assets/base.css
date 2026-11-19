@@ -19,6 +19,11 @@
   --primary-hover: #1d4ed8;
   --success-color: #10b981;
   --danger-color: #ef4444;
+
+  --note-color-red: #dc2626;
+  --note-color-green: #16a34a;
+  --note-color-blue: #2563eb;
+  --note-color-yellow: #ca8a04;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -43,6 +48,11 @@
     --primary-hover: #2563eb;
     --success-color: #10b981;
     --danger-color: #f87171;
+
+    --note-color-red: #f87171;
+    --note-color-green: #4ade80;
+    --note-color-blue: #60a5fa;
+    --note-color-yellow: #facc15;
   }
 }
 
