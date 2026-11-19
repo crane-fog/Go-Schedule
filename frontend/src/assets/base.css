@@ -63,6 +63,7 @@ body {
   background: var(--bg-page);
   line-height: 1.5;
   font-family:
+    'LXGW WenKai GB',
     Inter,
     -apple-system,
     BlinkMacSystemFont,
@@ -74,4 +75,10 @@ body {
   font-size: 15px;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+}
+
+input,
+textarea,
+select {
+  font-family: inherit;
 }

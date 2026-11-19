@@ -25,6 +25,14 @@ const sentinelRef = ref<HTMLElement | undefined>(undefined)
 const scheduleListRef = ref<HTMLElement | undefined>(undefined)
 const connectorGutterPx = ref(0)
 
+const NARROW_SCREEN_QUERY = '(max-width: 768px)'
+const isNarrowScreen = ref(false)
+let narrowMediaQuery: MediaQueryList | undefined = undefined
+
+function handleNarrowChange(event: MediaQueryListEvent): void {
+  isNarrowScreen.value = event.matches
+}
+
 useInfiniteScroll({
   canLoadMore: () => activeView.value === 'schedules' && store.hasMoreInfinite,
   onLoadMore: () => store.loadMoreOccurrences(),
@@ -127,12 +135,18 @@ function shouldShowDateDivider(idx: number): boolean {
 }
 
 onMounted(() => {
+  if (typeof globalThis.matchMedia === 'function') {
+    narrowMediaQuery = globalThis.matchMedia(NARROW_SCREEN_QUERY)
+    isNarrowScreen.value = narrowMediaQuery.matches
+    narrowMediaQuery.addEventListener('change', handleNarrowChange)
+  }
   void store.loadSchedules()
   globalThis.addEventListener('beforeunload', handleBeforeUnload)
   globalThis.addEventListener('keydown', handleGlobalKeydown)
 })
 
 onBeforeUnmount(() => {
+  narrowMediaQuery?.removeEventListener('change', handleNarrowChange)
   globalThis.removeEventListener('beforeunload', handleBeforeUnload)
   globalThis.removeEventListener('keydown', handleGlobalKeydown)
 })
@@ -242,7 +256,7 @@ onBeforeUnmount(() => {
           <TimeRangeConnectors
             :entries="store.displayedSchedules"
             :list-el="scheduleListRef"
-            :enabled="store.sortMode === 'time'"
+            :enabled="store.sortMode === 'time' && !isNarrowScreen"
             @gutter-change="connectorGutterPx = $event"
           />
 

@@ -493,6 +493,7 @@ defineExpose({
 }
 
 .tab-title {
+  font-weight: 700;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -520,6 +521,7 @@ defineExpose({
   background: var(--input-bg);
   color: var(--text-primary);
   font-size: 0.85rem;
+  font-weight: 700;
   line-height: 1.3;
   outline: none;
 }

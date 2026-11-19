@@ -27,7 +27,7 @@ const secondaryRuleText = computed(() => {
   if (item.value.type !== ScheduleTypeEnum.Recurring) {
     return ''
   }
-  return `重复规则：${formatRecurrenceSummary(item.value.recurrence)}`
+  return `重复：${formatRecurrenceSummary(item.value.recurrence)}`
 })
 </script>
 
@@ -62,11 +62,11 @@ const secondaryRuleText = computed(() => {
       <p class="card-time">{{ primaryTimeText }}</p>
 
       <div class="card-meta">
-        <span>优先级 {{ item.priority }}</span>
-        <span>ID #{{ item.id }}</span>
-        <span>创建于 {{ formatDateTime(item.created_at) }}</span>
+        <span>P{{ item.priority }}</span>
+        <span>#{{ item.id }}</span>
+        <span>{{ formatDateTime(item.created_at) }}</span>
         <span v-if="item.type === ScheduleTypeEnum.Recurring && item.recurrence?.timezone">
-          时区 {{ item.recurrence.timezone }}
+          {{ item.recurrence.timezone }}
         </span>
         <span v-if="secondaryRuleText">{{ secondaryRuleText }}</span>
       </div>
@@ -234,8 +234,9 @@ const secondaryRuleText = computed(() => {
 .card-meta {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.75rem;
+  gap: 0.15rem 0.75rem;
   font-size: 0.78rem;
+  line-height: 1.4;
   color: var(--text-muted);
 }
 

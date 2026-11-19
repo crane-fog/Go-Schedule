@@ -101,7 +101,7 @@ export function formatRecurrenceSummary(rec: Recurrence | null | undefined): str
   if (!rec) {
     return '未配置重复规则'
   }
-  return [formatFrequencyWithDetail(rec), formatRecurrenceEnd(rec)].filter(Boolean).join(' · ')
+  return [formatFrequencyWithDetail(rec), formatRecurrenceEnd(rec)].filter(Boolean).join(' ')
 }
 
 export function formatInferredRecurrenceHint(
