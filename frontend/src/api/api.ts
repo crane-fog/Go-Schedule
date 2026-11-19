@@ -188,6 +188,27 @@ export const NoteListResponseCodeEnum = {
 
 export type NoteListResponseCodeEnum = typeof NoteListResponseCodeEnum[keyof typeof NoteListResponseCodeEnum];
 
+export interface NoteMeta {
+    'id': number;
+    'title': string;
+    /**
+     * 页签排序权重（按升序排列）
+     */
+    'sort_order': number;
+    'created_at': string;
+    'updated_at': string;
+}
+export interface NoteMetaResponse {
+    'code': NoteMetaResponseCodeEnum;
+    'data': NoteMeta;
+}
+
+export const NoteMetaResponseCodeEnum = {
+    NUMBER_200: 200,
+} as const;
+
+export type NoteMetaResponseCodeEnum = typeof NoteMetaResponseCodeEnum[keyof typeof NoteMetaResponseCodeEnum];
+
 export interface NoteResponse {
     'code': NoteResponseCodeEnum;
     'data': Note;
@@ -307,12 +328,19 @@ export const ScheduleResponseCodeEnum = {
 
 export type ScheduleResponseCodeEnum = typeof ScheduleResponseCodeEnum[keyof typeof ScheduleResponseCodeEnum];
 
-export interface UpdateNoteRequest {
-    'title': string;
+export interface UpdateNoteContentRequest {
     /**
      * Markdown 正文内容（允许为空字符串）
      */
     'content': string;
+}
+/**
+ * @type UpdateNoteMeta200Response
+ */
+export type UpdateNoteMeta200Response = ErrorResponse | NoteMetaResponse;
+
+export interface UpdateNoteMetaRequest {
+    'title': string;
     /**
      * 页签排序权重
      */
@@ -504,19 +532,19 @@ export const NotesApiAxiosParamCreator = function (configuration?: Configuration
             };
         },
         /**
-         * 全量更新指定记事页签的标题、Markdown 正文与排序权重。
-         * @summary 更新记事页签
+         * 仅更新指定记事页签的 Markdown 正文内容（`content`），不修改标题与排序权重；响应返回全量记事页签信息。
+         * @summary 更新记事页签正文
          * @param {number} id 记事页签 ID
-         * @param {UpdateNoteRequest} updateNoteRequest 
+         * @param {UpdateNoteContentRequest} updateNoteContentRequest 
          * @param {*} [options] Override http request option.
          * @throws {RequiredError}
          */
-        updateNote: async (id: number, updateNoteRequest: UpdateNoteRequest, options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
+        updateNoteContent: async (id: number, updateNoteContentRequest: UpdateNoteContentRequest, options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
             // verify required parameter 'id' is not null or undefined
-            assertParamExists('updateNote', 'id', id)
-            // verify required parameter 'updateNoteRequest' is not null or undefined
-            assertParamExists('updateNote', 'updateNoteRequest', updateNoteRequest)
-            const localVarPath = `/api/v1/notes/{id}`
+            assertParamExists('updateNoteContent', 'id', id)
+            // verify required parameter 'updateNoteContentRequest' is not null or undefined
+            assertParamExists('updateNoteContent', 'updateNoteContentRequest', updateNoteContentRequest)
+            const localVarPath = `/api/v1/notes/{id}/content`
                 .replace('{id}', encodeURIComponent(String(id)));
             // use dummy base URL string because the URL constructor only accepts absolute URLs.
             const localVarUrlObj = new URL(localVarPath, DUMMY_BASE_URL);
@@ -535,7 +563,46 @@ export const NotesApiAxiosParamCreator = function (configuration?: Configuration
             setSearchParams(localVarUrlObj, localVarQueryParameter);
             let headersFromBaseOptions = baseOptions && baseOptions.headers ? baseOptions.headers : {};
             localVarRequestOptions.headers = {...localVarHeaderParameter, ...headersFromBaseOptions, ...options.headers};
-            localVarRequestOptions.data = serializeDataIfNeeded(updateNoteRequest, localVarRequestOptions, configuration)
+            localVarRequestOptions.data = serializeDataIfNeeded(updateNoteContentRequest, localVarRequestOptions, configuration)
+
+            return {
+                url: toPathString(localVarUrlObj),
+                options: localVarRequestOptions,
+            };
+        },
+        /**
+         * 仅更新指定记事页签的标题（`title`）与排序权重（`sort_order`），不修改正文内容；响应中不包含 `content` 字段。
+         * @summary 更新记事页签元信息
+         * @param {number} id 记事页签 ID
+         * @param {UpdateNoteMetaRequest} updateNoteMetaRequest 
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        updateNoteMeta: async (id: number, updateNoteMetaRequest: UpdateNoteMetaRequest, options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
+            // verify required parameter 'id' is not null or undefined
+            assertParamExists('updateNoteMeta', 'id', id)
+            // verify required parameter 'updateNoteMetaRequest' is not null or undefined
+            assertParamExists('updateNoteMeta', 'updateNoteMetaRequest', updateNoteMetaRequest)
+            const localVarPath = `/api/v1/notes/{id}/meta`
+                .replace('{id}', encodeURIComponent(String(id)));
+            // use dummy base URL string because the URL constructor only accepts absolute URLs.
+            const localVarUrlObj = new URL(localVarPath, DUMMY_BASE_URL);
+            let baseOptions;
+            if (configuration) {
+                baseOptions = configuration.baseOptions;
+            }
+
+            const localVarRequestOptions = { method: 'PUT', ...baseOptions, ...options};
+            const localVarHeaderParameter = {} as any;
+            const localVarQueryParameter = {} as any;
+
+            localVarHeaderParameter['Content-Type'] = 'application/json';
+            localVarHeaderParameter['Accept'] = 'application/json';
+
+            setSearchParams(localVarUrlObj, localVarQueryParameter);
+            let headersFromBaseOptions = baseOptions && baseOptions.headers ? baseOptions.headers : {};
+            localVarRequestOptions.headers = {...localVarHeaderParameter, ...headersFromBaseOptions, ...options.headers};
+            localVarRequestOptions.data = serializeDataIfNeeded(updateNoteMetaRequest, localVarRequestOptions, configuration)
 
             return {
                 url: toPathString(localVarUrlObj),
@@ -643,17 +710,31 @@ export const NotesApiFp = function(configuration?: Configuration) {
             return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
         },
         /**
-         * 全量更新指定记事页签的标题、Markdown 正文与排序权重。
-         * @summary 更新记事页签
+         * 仅更新指定记事页签的 Markdown 正文内容（`content`），不修改标题与排序权重；响应返回全量记事页签信息。
+         * @summary 更新记事页签正文
          * @param {number} id 记事页签 ID
-         * @param {UpdateNoteRequest} updateNoteRequest 
+         * @param {UpdateNoteContentRequest} updateNoteContentRequest 
          * @param {*} [options] Override http request option.
          * @throws {RequiredError}
          */
-        async updateNote(id: number, updateNoteRequest: UpdateNoteRequest, options?: RawAxiosRequestConfig): Promise<(axios?: AxiosInstance, basePath?: string) => AxiosPromise<CreateNote200Response>> {
-            const localVarAxiosArgs = await localVarAxiosParamCreator.updateNote(id, updateNoteRequest, options);
+        async updateNoteContent(id: number, updateNoteContentRequest: UpdateNoteContentRequest, options?: RawAxiosRequestConfig): Promise<(axios?: AxiosInstance, basePath?: string) => AxiosPromise<CreateNote200Response>> {
+            const localVarAxiosArgs = await localVarAxiosParamCreator.updateNoteContent(id, updateNoteContentRequest, options);
             const localVarOperationServerIndex = configuration?.serverIndex ?? 0;
-            const localVarOperationServerBasePath = operationServerMap['NotesApi.updateNote']?.[localVarOperationServerIndex]?.url;
+            const localVarOperationServerBasePath = operationServerMap['NotesApi.updateNoteContent']?.[localVarOperationServerIndex]?.url;
+            return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
+        },
+        /**
+         * 仅更新指定记事页签的标题（`title`）与排序权重（`sort_order`），不修改正文内容；响应中不包含 `content` 字段。
+         * @summary 更新记事页签元信息
+         * @param {number} id 记事页签 ID
+         * @param {UpdateNoteMetaRequest} updateNoteMetaRequest 
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        async updateNoteMeta(id: number, updateNoteMetaRequest: UpdateNoteMetaRequest, options?: RawAxiosRequestConfig): Promise<(axios?: AxiosInstance, basePath?: string) => AxiosPromise<UpdateNoteMeta200Response>> {
+            const localVarAxiosArgs = await localVarAxiosParamCreator.updateNoteMeta(id, updateNoteMetaRequest, options);
+            const localVarOperationServerIndex = configuration?.serverIndex ?? 0;
+            const localVarOperationServerBasePath = operationServerMap['NotesApi.updateNoteMeta']?.[localVarOperationServerIndex]?.url;
             return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
         },
         /**
@@ -718,14 +799,24 @@ export const NotesApiFactory = function (configuration?: Configuration, basePath
             return localVarFp.listNotes(options).then((request) => request(axios, basePath));
         },
         /**
-         * 全量更新指定记事页签的标题、Markdown 正文与排序权重。
-         * @summary 更新记事页签
-         * @param {NotesApiUpdateNoteRequest} requestParameters Request parameters.
+         * 仅更新指定记事页签的 Markdown 正文内容（`content`），不修改标题与排序权重；响应返回全量记事页签信息。
+         * @summary 更新记事页签正文
+         * @param {NotesApiUpdateNoteContentRequest} requestParameters Request parameters.
          * @param {*} [options] Override http request option.
          * @throws {RequiredError}
          */
-        updateNote(requestParameters: NotesApiUpdateNoteRequest, options?: RawAxiosRequestConfig): AxiosPromise<CreateNote200Response> {
-            return localVarFp.updateNote(requestParameters.id, requestParameters.updateNoteRequest, options).then((request) => request(axios, basePath));
+        updateNoteContent(requestParameters: NotesApiUpdateNoteContentRequest, options?: RawAxiosRequestConfig): AxiosPromise<CreateNote200Response> {
+            return localVarFp.updateNoteContent(requestParameters.id, requestParameters.updateNoteContentRequest, options).then((request) => request(axios, basePath));
+        },
+        /**
+         * 仅更新指定记事页签的标题（`title`）与排序权重（`sort_order`），不修改正文内容；响应中不包含 `content` 字段。
+         * @summary 更新记事页签元信息
+         * @param {NotesApiUpdateNoteMetaRequest} requestParameters Request parameters.
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        updateNoteMeta(requestParameters: NotesApiUpdateNoteMetaRequest, options?: RawAxiosRequestConfig): AxiosPromise<UpdateNoteMeta200Response> {
+            return localVarFp.updateNoteMeta(requestParameters.id, requestParameters.updateNoteMetaRequest, options).then((request) => request(axios, basePath));
         },
         /**
          * 上传单张图片（支持 `.png`、`.jpg`、`.jpeg`、`.gif`、`.webp`、`.svg`、`.bmp`、`.ico`、`.avif`），落盘至服务端配置的 `image_dir` 目录并返回访问 URL。
@@ -768,15 +859,27 @@ export interface NotesApiGetNoteImageRequest {
 }
 
 /**
- * Request parameters for updateNote operation in NotesApi.
+ * Request parameters for updateNoteContent operation in NotesApi.
  */
-export interface NotesApiUpdateNoteRequest {
+export interface NotesApiUpdateNoteContentRequest {
     /**
      * 记事页签 ID
      */
     readonly id: number
 
-    readonly updateNoteRequest: UpdateNoteRequest
+    readonly updateNoteContentRequest: UpdateNoteContentRequest
+}
+
+/**
+ * Request parameters for updateNoteMeta operation in NotesApi.
+ */
+export interface NotesApiUpdateNoteMetaRequest {
+    /**
+     * 记事页签 ID
+     */
+    readonly id: number
+
+    readonly updateNoteMetaRequest: UpdateNoteMetaRequest
 }
 
 /**
@@ -837,14 +940,25 @@ export class NotesApi extends BaseAPI {
     }
 
     /**
-     * 全量更新指定记事页签的标题、Markdown 正文与排序权重。
-     * @summary 更新记事页签
-     * @param {NotesApiUpdateNoteRequest} requestParameters Request parameters.
+     * 仅更新指定记事页签的 Markdown 正文内容（`content`），不修改标题与排序权重；响应返回全量记事页签信息。
+     * @summary 更新记事页签正文
+     * @param {NotesApiUpdateNoteContentRequest} requestParameters Request parameters.
      * @param {*} [options] Override http request option.
      * @throws {RequiredError}
      */
-    public updateNote(requestParameters: NotesApiUpdateNoteRequest, options?: RawAxiosRequestConfig) {
-        return NotesApiFp(this.configuration).updateNote(requestParameters.id, requestParameters.updateNoteRequest, options).then((request) => request(this.axios, this.basePath));
+    public updateNoteContent(requestParameters: NotesApiUpdateNoteContentRequest, options?: RawAxiosRequestConfig) {
+        return NotesApiFp(this.configuration).updateNoteContent(requestParameters.id, requestParameters.updateNoteContentRequest, options).then((request) => request(this.axios, this.basePath));
+    }
+
+    /**
+     * 仅更新指定记事页签的标题（`title`）与排序权重（`sort_order`），不修改正文内容；响应中不包含 `content` 字段。
+     * @summary 更新记事页签元信息
+     * @param {NotesApiUpdateNoteMetaRequest} requestParameters Request parameters.
+     * @param {*} [options] Override http request option.
+     * @throws {RequiredError}
+     */
+    public updateNoteMeta(requestParameters: NotesApiUpdateNoteMetaRequest, options?: RawAxiosRequestConfig) {
+        return NotesApiFp(this.configuration).updateNoteMeta(requestParameters.id, requestParameters.updateNoteMetaRequest, options).then((request) => request(this.axios, this.basePath));
     }
 
     /**

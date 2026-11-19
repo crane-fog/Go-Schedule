@@ -9,13 +9,9 @@
 
 package openapi
 
-type UpdateNoteRequest struct {
+type UpdateNoteMeta200Response struct {
 
-	Title string `json:"title"`
+	Code int32 `json:"code"`
 
-	// Markdown 正文内容（允许为空字符串）
-	Content string `json:"content"`
-
-	// 页签排序权重
-	SortOrder int32 `json:"sort_order"`
+	Data ErrorResponseData `json:"data"`
 }
