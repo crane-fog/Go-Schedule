@@ -432,6 +432,12 @@ paths:
             responses:
                 "200":
                     description: 返回图片二进制或 SVG 内容
+                    headers:
+                        Cache-Control:
+                            description: 浏览器长期强缓存策略（图片文件名唯一且内容不可变）
+                            schema:
+                                type: string
+                                example: private, max-age=31536000, immutable
                     content:
                         image/*:
                             schema:

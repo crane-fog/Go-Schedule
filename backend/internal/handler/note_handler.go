@@ -148,5 +148,6 @@ func (h *NoteHandler) GetNoteImage(c *gin.Context) {
 		c.Status(http.StatusNotFound)
 		return
 	}
+	c.Header("Cache-Control", "private, max-age=31536000, immutable")
 	c.File(fullPath)
 }
