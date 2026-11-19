@@ -33,14 +33,25 @@ func (s *NoteService) CreateNote(req *openapi.CreateNoteRequest) (*openapi.Note,
 	return s.store.CreateNote(req)
 }
 
-func (s *NoteService) UpdateNote(id int64, req *openapi.UpdateNoteRequest) (*openapi.Note, error) {
+func (s *NoteService) UpdateNoteMeta(id int64, req *openapi.UpdateNoteMetaRequest) (*openapi.NoteMeta, error) {
 	if id < 1 {
 		return nil, badRequest("Invalid note ID")
 	}
 	if err := validateTitle(req.Title); err != nil {
 		return nil, err
 	}
-	result, err := s.store.UpdateNote(id, req)
+	result, err := s.store.UpdateNoteMeta(id, req)
+	if err != nil {
+		return nil, mapStoreError(err)
+	}
+	return result, nil
+}
+
+func (s *NoteService) UpdateNoteContent(id int64, req *openapi.UpdateNoteContentRequest) (*openapi.Note, error) {
+	if id < 1 {
+		return nil, badRequest("Invalid note ID")
+	}
+	result, err := s.store.UpdateNoteContent(id, req)
 	if err != nil {
 		return nil, mapStoreError(err)
 	}

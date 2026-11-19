@@ -13,7 +13,8 @@ import (
 type NoteService interface {
 	GetNotes() ([]openapi.Note, error)
 	CreateNote(req *openapi.CreateNoteRequest) (*openapi.Note, error)
-	UpdateNote(id int64, req *openapi.UpdateNoteRequest) (*openapi.Note, error)
+	UpdateNoteMeta(id int64, req *openapi.UpdateNoteMetaRequest) (*openapi.NoteMeta, error)
+	UpdateNoteContent(id int64, req *openapi.UpdateNoteContentRequest) (*openapi.Note, error)
 	DeleteNote(id int64) (*openapi.DeleteScheduleResponseData, error)
 	SaveImage(file *multipart.FileHeader) (*openapi.NoteImageData, error)
 	GetImagePath(filename string) (string, error)
@@ -32,7 +33,8 @@ func (h *NoteHandler) RegisterRoutes(rg *gin.RouterGroup) {
 	{
 		notes.GET("", h.GetNotes)
 		notes.POST("", h.CreateNote)
-		notes.PUT("/:id", h.UpdateNote)
+		notes.PUT("/:id/meta", h.UpdateNoteMeta)
+		notes.PUT("/:id/content", h.UpdateNoteContent)
 		notes.DELETE("/:id", h.DeleteNote)
 		notes.POST("/images", h.UploadNoteImage)
 		notes.GET("/images/:filename", h.GetNoteImage)
@@ -62,23 +64,49 @@ func (h *NoteHandler) CreateNote(c *gin.Context) {
 	writeJSON(c, openapi.NoteResponse{Code: 200, Data: *data})
 }
 
-func (h *NoteHandler) UpdateNote(c *gin.Context) {
-	var req openapi.UpdateNoteRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		writeErrorWithCode(c, 400, "Invalid request")
-		return
-	}
+func parseNoteID(c *gin.Context) (int64, bool) {
 	idStr := c.Param("id")
 	if idStr == "" {
 		writeErrorWithCode(c, 400, "Missing note ID")
-		return
+		return 0, false
 	}
 	id, err := strconv.ParseInt(idStr, 10, 64)
 	if err != nil {
 		writeErrorWithCode(c, 400, "Invalid note ID format")
+		return 0, false
+	}
+	return id, true
+}
+
+func (h *NoteHandler) UpdateNoteMeta(c *gin.Context) {
+	var req openapi.UpdateNoteMetaRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		writeErrorWithCode(c, 400, "Invalid request")
 		return
 	}
-	data, err := h.noteService.UpdateNote(id, &req)
+	id, ok := parseNoteID(c)
+	if !ok {
+		return
+	}
+	data, err := h.noteService.UpdateNoteMeta(id, &req)
+	if err != nil {
+		writeError(c, err)
+		return
+	}
+	writeJSON(c, openapi.NoteMetaResponse{Code: 200, Data: *data})
+}
+
+func (h *NoteHandler) UpdateNoteContent(c *gin.Context) {
+	var req openapi.UpdateNoteContentRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		writeErrorWithCode(c, 400, "Invalid request")
+		return
+	}
+	id, ok := parseNoteID(c)
+	if !ok {
+		return
+	}
+	data, err := h.noteService.UpdateNoteContent(id, &req)
 	if err != nil {
 		writeError(c, err)
 		return
@@ -87,14 +115,8 @@ func (h *NoteHandler) UpdateNote(c *gin.Context) {
 }
 
 func (h *NoteHandler) DeleteNote(c *gin.Context) {
-	idStr := c.Param("id")
-	if idStr == "" {
-		writeErrorWithCode(c, 400, "Missing note ID")
-		return
-	}
-	id, err := strconv.ParseInt(idStr, 10, 64)
-	if err != nil {
-		writeErrorWithCode(c, 400, "Invalid note ID format")
+	id, ok := parseNoteID(c)
+	if !ok {
 		return
 	}
 	data, err := h.noteService.DeleteNote(id)

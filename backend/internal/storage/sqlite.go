@@ -3,6 +3,7 @@ package storage
 import (
 	"errors"
 	"schedule/internal/openapi"
+	"time"
 
 	"github.com/glebarez/sqlite"
 	"gorm.io/gorm"
@@ -122,18 +123,47 @@ func (store *Store) CreateNote(req *openapi.CreateNoteRequest) (*openapi.Note, e
 	return &n.Note, nil
 }
 
-func (store *Store) UpdateNote(id int64, req *openapi.UpdateNoteRequest) (*openapi.Note, error) {
-	var n Notes
-	if err := store.db.First(&n, id).Error; err != nil {
+func (store *Store) UpdateNoteMeta(id int64, req *openapi.UpdateNoteMetaRequest) (*openapi.NoteMeta, error) {
+	result := store.db.Model(&Notes{}).Where("id = ?", id).Updates(map[string]any{
+		"title":      req.Title,
+		"sort_order": req.SortOrder,
+		"updated_at": time.Now(),
+	})
+	if result.Error != nil {
+		return nil, result.Error
+	}
+	if result.RowsAffected == 0 {
+		return nil, ErrNotFound
+	}
+	var meta openapi.NoteMeta
+	if err := store.db.Model(&Notes{}).
+		Select("id", "title", "sort_order", "created_at", "updated_at").
+		Where("id = ?", id).
+		First(&meta).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, ErrNotFound
 		}
 		return nil, err
 	}
-	n.Title = req.Title
-	n.Content = req.Content
-	n.SortOrder = req.SortOrder
-	if err := store.db.Save(&n).Error; err != nil {
+	return &meta, nil
+}
+
+func (store *Store) UpdateNoteContent(id int64, req *openapi.UpdateNoteContentRequest) (*openapi.Note, error) {
+	result := store.db.Model(&Notes{}).Where("id = ?", id).Updates(map[string]any{
+		"content":    req.Content,
+		"updated_at": time.Now(),
+	})
+	if result.Error != nil {
+		return nil, result.Error
+	}
+	if result.RowsAffected == 0 {
+		return nil, ErrNotFound
+	}
+	var n Notes
+	if err := store.db.First(&n, id).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, ErrNotFound
+		}
 		return nil, err
 	}
 	return &n.Note, nil
