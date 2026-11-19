@@ -7,8 +7,10 @@ import {
   type ErrorResponse,
   type Note,
   type NoteImageData,
+  type NoteMeta,
   type Schedule,
-  type UpdateNoteRequest,
+  type UpdateNoteContentRequest,
+  type UpdateNoteMetaRequest,
   type UpdateScheduleRequest,
 } from './index'
 
@@ -85,10 +87,23 @@ export async function createNoteItem(req: CreateNoteRequest): Promise<Note> {
   return requestApi(() => notesApi.createNote({ createNoteRequest: req }), '创建记事页签失败')
 }
 
-export async function updateNoteItem(id: number, req: UpdateNoteRequest): Promise<Note> {
+export async function updateNoteMetaItem(
+  id: number,
+  req: UpdateNoteMetaRequest,
+): Promise<NoteMeta> {
   return requestApi(
-    () => notesApi.updateNote({ id, updateNoteRequest: req }),
-    '保存记事页签失败',
+    () => notesApi.updateNoteMeta({ id, updateNoteMetaRequest: req }),
+    '保存记事页签元信息失败',
+  )
+}
+
+export async function updateNoteContentItem(
+  id: number,
+  req: UpdateNoteContentRequest,
+): Promise<Note> {
+  return requestApi(
+    () => notesApi.updateNoteContent({ id, updateNoteContentRequest: req }),
+    '保存记事正文失败',
   )
 }
 

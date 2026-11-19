@@ -1,12 +1,13 @@
 import { computed, ref, type Ref } from 'vue'
 import { defineStore } from 'pinia'
-import type { Note, UpdateNoteRequest } from '@/api'
+import type { Note, NoteMeta } from '@/api'
 import {
   createNoteItem,
   deleteNoteItem,
   extractErrorMessage,
   fetchNotes,
-  updateNoteItem,
+  updateNoteContentItem,
+  updateNoteMetaItem,
   uploadNoteImage,
 } from '@/api/client'
 
@@ -25,9 +26,11 @@ interface NoteSaveContext {
   inFlightSaves: Map<number, Promise<boolean>>
 }
 
-export type NoteSaveStatus = 'idle' | 'dirty' | 'saving' | 'saved'
-
 const AUTO_SAVE_DELAY_MS = 1000
+const SORT_ORDER_STEP = 1024
+const MAX_SAFE_INT32_ORDER = 2_000_000_000
+
+export type TabDropPlacement = 'before' | 'after'
 
 function toSnapshot(note: Note): NoteSnapshot {
   return {
@@ -35,6 +38,87 @@ function toSnapshot(note: Note): NoteSnapshot {
     sort_order: note.sort_order,
     title: note.title,
   }
+}
+
+function getNextSortOrder(notes: Note[]): number {
+  if (notes.length === 0) {
+    return SORT_ORDER_STEP
+  }
+  let maxOrder = notes[0]?.sort_order ?? 0
+  for (const item of notes) {
+    if (item.sort_order > maxOrder) {
+      maxOrder = item.sort_order
+    }
+  }
+  return maxOrder + SORT_ORDER_STEP
+}
+
+function buildReorderedNotes(
+  list: Note[],
+  move: { draggedId: number; placement: TabDropPlacement; targetId: number },
+): { insertIdx: number; reordered: Note[] } | undefined {
+  const fromIdx = list.findIndex((item) => item.id === move.draggedId)
+  const targetIdx = list.findIndex((item) => item.id === move.targetId)
+  if (fromIdx === -1 || targetIdx === -1 || fromIdx === targetIdx) {
+    return undefined
+  }
+  let insertIdx = targetIdx
+  if (move.placement === 'after') {
+    insertIdx = targetIdx + 1
+  }
+  if (fromIdx < insertIdx) {
+    insertIdx -= 1
+  }
+  if (insertIdx === fromIdx) {
+    return undefined
+  }
+  const reordered = [...list]
+  const [moved] = reordered.splice(fromIdx, 1)
+  if (!moved) {
+    return undefined
+  }
+  reordered.splice(insertIdx, 0, moved)
+  return { insertIdx, reordered }
+}
+
+function applySortOrders(list: Note[], orders: Map<number, number>): void {
+  for (const item of list) {
+    const nextOrder = orders.get(item.id)
+    if (nextOrder !== undefined) {
+      item.sort_order = nextOrder
+    }
+  }
+}
+
+function computeReorderedSortOrders(reordered: Note[], movedIndex: number): Map<number, number> {
+  const moved = reordered[movedIndex]
+  if (!moved) {
+    return new Map()
+  }
+  const prev = reordered[movedIndex - 1]
+  const next = reordered[movedIndex + 1]
+
+  let singleOrder: number | undefined = undefined
+  if (!prev && next) {
+    singleOrder = next.sort_order - SORT_ORDER_STEP
+  } else if (prev && !next) {
+    singleOrder = prev.sort_order + SORT_ORDER_STEP
+  } else if (prev && next && next.sort_order - prev.sort_order >= 2) {
+    singleOrder = Math.floor((prev.sort_order + next.sort_order) / 2)
+  }
+
+  if (singleOrder !== undefined && Math.abs(singleOrder) <= MAX_SAFE_INT32_ORDER) {
+    return new Map([[moved.id, singleOrder]])
+  }
+
+  const updates = new Map<number, number>()
+  for (const [idx, item] of reordered.entries()) {
+    const nextOrder = (idx + 1) * SORT_ORDER_STEP
+    if (item.sort_order !== nextOrder) {
+      updates.set(item.id, nextOrder)
+    }
+  }
+  return updates
 }
 
 function buildNextNoteTitle(notes: Note[]): string {
@@ -46,15 +130,22 @@ function buildNextNoteTitle(notes: Note[]): string {
   return `新记事 ${index}`
 }
 
-function hasNoteDiff(note: Note | undefined, snap: NoteSnapshot | undefined): boolean {
+function hasMetaDiff(note: Note | undefined, snap: NoteSnapshot | undefined): boolean {
   if (!note || !snap) {
     return false
   }
-  return (
-    note.title !== snap.title ||
-    note.content !== snap.content ||
-    note.sort_order !== snap.sort_order
-  )
+  return note.title !== snap.title || note.sort_order !== snap.sort_order
+}
+
+function hasContentDiff(note: Note | undefined, snap: NoteSnapshot | undefined): boolean {
+  if (!note || !snap) {
+    return false
+  }
+  return note.content !== snap.content
+}
+
+function hasNoteDiff(note: Note | undefined, snap: NoteSnapshot | undefined): boolean {
+  return hasMetaDiff(note, snap) || hasContentDiff(note, snap)
 }
 
 function clearTimer(timers: Map<number, ReturnType<typeof setTimeout>>, id: number): void {
@@ -83,36 +174,69 @@ function createSaveHelper(ctx: NoteSaveContext) {
     ctx.autoSaveTimers.set(id, timer)
   }
 
-  function applySavedNote(id: number, payload: UpdateNoteRequest, saved: Note): void {
+  function applySavedMeta(id: number, saved: NoteMeta): void {
     const current = findNote(id)
     if (!current) {
       return
     }
-    ctx.savedSnapshots.value.set(id, toSnapshot(saved))
+    const prevSnap = ctx.savedSnapshots.value.get(id)
+    ctx.savedSnapshots.value.set(id, {
+      content: prevSnap?.content ?? current.content,
+      sort_order: saved.sort_order,
+      title: saved.title,
+    })
     current.created_at = saved.created_at
     current.updated_at = saved.updated_at
+  }
 
-    // 如果请求在途期间用户又修改了标题或正文，保留未落盘草稿并续约防抖保存
-    const editedDuringFlight =
-      current.title !== payload.title ||
-      current.content !== payload.content ||
-      current.sort_order !== payload.sort_order
-    if (editedDuringFlight && current.title.trim() !== '') {
+  function applySavedContent(id: number, saved: Note): void {
+    const current = findNote(id)
+    if (!current) {
+      return
+    }
+    const prevSnap = ctx.savedSnapshots.value.get(id)
+    ctx.savedSnapshots.value.set(id, {
+      content: saved.content,
+      sort_order: prevSnap?.sort_order ?? saved.sort_order,
+      title: prevSnap?.title ?? saved.title,
+    })
+    current.created_at = saved.created_at
+    current.updated_at = saved.updated_at
+  }
+
+  function rescheduleIfEditedDuringFlight(id: number): void {
+    const current = findNote(id)
+    const snap = ctx.savedSnapshots.value.get(id)
+    if (!current || !snap) {
+      return
+    }
+    const metaStillDirty = hasMetaDiff(current, snap)
+    const contentStillDirty = hasContentDiff(current, snap)
+    if (contentStillDirty || (metaStillDirty && current.title.trim() !== '')) {
       scheduleAutoSave(id)
     }
   }
 
-  async function executeSave(id: number, note: Note): Promise<boolean> {
-    const payload: UpdateNoteRequest = {
-      content: note.content,
-      sort_order: note.sort_order,
-      title: note.title,
-    }
+  async function executeSave(
+    note: Note,
+    dirty: { content: boolean; meta: boolean },
+  ): Promise<boolean> {
+    const { id } = note
     ctx.savingIds.value.add(id)
     ctx.error.value = undefined
     try {
-      const saved = await updateNoteItem(id, payload)
-      applySavedNote(id, payload, saved)
+      if (dirty.meta) {
+        const savedMeta = await updateNoteMetaItem(id, {
+          sort_order: note.sort_order,
+          title: note.title,
+        })
+        applySavedMeta(id, savedMeta)
+      }
+      if (dirty.content) {
+        const savedNote = await updateNoteContentItem(id, { content: note.content })
+        applySavedContent(id, savedNote)
+      }
+      rescheduleIfEditedDuringFlight(id)
       return true
     } catch (err) {
       ctx.error.value = extractErrorMessage(err, '保存记事页签失败')
@@ -135,18 +259,21 @@ function createSaveHelper(ctx: NoteSaveContext) {
     }
 
     const note = findNote(id)
+    const snap = ctx.savedSnapshots.value.get(id)
     if (!note) {
       return false
     }
-    if (!isNoteDirty(id)) {
+    const meta = hasMetaDiff(note, snap)
+    const content = hasContentDiff(note, snap)
+    if (!meta && !content) {
       return true
     }
-    if (note.title.trim() === '') {
+    if (meta && note.title.trim() === '') {
       ctx.error.value = '记事页签标题不能为空'
       return false
     }
 
-    const savePromise = executeSave(id, note)
+    const savePromise = executeSave(note, { content, meta })
     ctx.inFlightSaves.set(id, savePromise)
     return savePromise
   }
@@ -163,11 +290,37 @@ function createSaveHelper(ctx: NoteSaveContext) {
     return true
   }
 
+  async function saveNoteMetaOnly(id: number): Promise<boolean> {
+    const pending = ctx.inFlightSaves.get(id)
+    if (pending) {
+      await pending
+    }
+    const note = findNote(id)
+    if (!note) {
+      return false
+    }
+    const snap = ctx.savedSnapshots.value.get(id)
+    if (!hasMetaDiff(note, snap)) {
+      return true
+    }
+    let { title } = note
+    if (title.trim() === '') {
+      title = snap?.title ?? '未命名记事'
+    }
+    const savedMeta = await updateNoteMetaItem(id, {
+      sort_order: note.sort_order,
+      title,
+    })
+    applySavedMeta(id, savedMeta)
+    return true
+  }
+
   return {
     findNote,
     flushNote,
     isNoteDirty,
     saveNote,
+    saveNoteMetaOnly,
     scheduleAutoSave,
   }
 }
@@ -200,20 +353,6 @@ export const useNoteStore = defineStore('note', () => {
       return undefined
     }
     return helper.findNote(activeNoteId.value)
-  })
-
-  const activeSaveStatus = computed<NoteSaveStatus>(() => {
-    const current = activeNote.value
-    if (!current) {
-      return 'idle'
-    }
-    if (savingIds.value.has(current.id)) {
-      return 'saving'
-    }
-    if (helper.isNoteDirty(current.id)) {
-      return 'dirty'
-    }
-    return 'saved'
   })
 
   const hasUnsavedOrSaving = computed(
@@ -303,7 +442,8 @@ export const useNoteStore = defineStore('note', () => {
     error.value = undefined
     try {
       const nextTitle = title?.trim() || buildNextNoteTitle(notes.value)
-      const created = await createNoteItem({ content: '', sort_order: 0, title: nextTitle })
+      const sortOrder = getNextSortOrder(notes.value)
+      const created = await createNoteItem({ content: '', sort_order: sortOrder, title: nextTitle })
       notes.value.push(created)
       savedSnapshots.value.set(created.id, toSnapshot(created))
       activeNoteId.value = created.id
@@ -313,6 +453,35 @@ export const useNoteStore = defineStore('note', () => {
       return undefined
     } finally {
       creating.value = false
+    }
+  }
+
+  async function reorderNote(
+    draggedId: number,
+    targetId: number,
+    placement: TabDropPlacement,
+  ): Promise<boolean> {
+    const prevList = [...notes.value]
+    const moveResult = buildReorderedNotes(prevList, { draggedId, placement, targetId })
+    if (!moveResult) {
+      return false
+    }
+
+    const orderUpdates = computeReorderedSortOrders(moveResult.reordered, moveResult.insertIdx)
+    const prevOrders = new Map(prevList.map((item) => [item.id, item.sort_order]))
+
+    notes.value = moveResult.reordered
+    applySortOrders(notes.value, orderUpdates)
+
+    error.value = undefined
+    try {
+      await Promise.all([...orderUpdates.keys()].map((id) => helper.saveNoteMetaOnly(id)))
+      return true
+    } catch (err) {
+      notes.value = prevList
+      applySortOrders(notes.value, prevOrders)
+      error.value = extractErrorMessage(err, '调整记事页签顺序失败')
+      return false
     }
   }
 
@@ -354,7 +523,6 @@ export const useNoteStore = defineStore('note', () => {
   return {
     activeNote,
     activeNoteId,
-    activeSaveStatus,
     clearError,
     commitTitleEdit,
     createNote,
@@ -366,11 +534,11 @@ export const useNoteStore = defineStore('note', () => {
     flushNote: helper.flushNote,
     hasUnsavedOrSaving,
     isNoteDirty: helper.isNoteDirty,
-    isNoteSaving: (id: number) => savingIds.value.has(id),
     loadNotes,
     loaded,
     loading,
     notes,
+    reorderNote,
     saveNote: helper.saveNote,
     selectNote,
     updateDraftContent,

@@ -10,30 +10,19 @@ import {
 import type { Ctx } from '@milkdown/kit/ctx'
 import { clipboard } from '@milkdown/kit/plugin/clipboard'
 import { cursor } from '@milkdown/kit/plugin/cursor'
-import { history, redoCommand, undoCommand } from '@milkdown/kit/plugin/history'
+import { history } from '@milkdown/kit/plugin/history'
 import { indent } from '@milkdown/kit/plugin/indent'
 import { listener, listenerCtx } from '@milkdown/kit/plugin/listener'
 import { trailing } from '@milkdown/kit/plugin/trailing'
 import { upload, uploadConfig, type Uploader } from '@milkdown/kit/plugin/upload'
-import {
-  commonmark,
-  createCodeBlockCommand,
-  insertHrCommand,
-  insertImageCommand,
-  toggleEmphasisCommand,
-  toggleInlineCodeCommand,
-  toggleStrongCommand,
-  wrapInBlockquoteCommand,
-  wrapInBulletListCommand,
-  wrapInHeadingCommand,
-  wrapInOrderedListCommand,
-} from '@milkdown/kit/preset/commonmark'
-import { gfm, insertTableCommand, toggleStrikethroughCommand } from '@milkdown/kit/preset/gfm'
+import { commonmark } from '@milkdown/kit/preset/commonmark'
+import { gfm } from '@milkdown/kit/preset/gfm'
 import { Decoration } from '@milkdown/kit/prose/view'
-import { callCommand, getMarkdown, replaceAll } from '@milkdown/kit/utils'
+import { getMarkdown, replaceAll } from '@milkdown/kit/utils'
 import '@milkdown/kit/prose/view/style/prosemirror.css'
 import '@milkdown/kit/prose/tables/style/tables.css'
 import { extractErrorMessage } from '@/api/client'
+import { resizableImageView } from '@/utils/milkdown-image-resize'
 
 const IMAGE_EXT_PATTERN = /\.(?:png|jpe?g|gif|webp|svg|bmp|ico|avif)$/i
 
@@ -50,8 +39,6 @@ const emit = defineEmits<{
 }>()
 
 const editorRootRef = ref<HTMLElement | undefined>(undefined)
-const fileInputRef = ref<HTMLInputElement | undefined>(undefined)
-const uploadingCount = ref(0)
 
 let editorInstance: Editor | undefined = undefined
 let editorReady = false
@@ -92,23 +79,18 @@ const handleMilkdownUpload: Uploader = async (files, schema) => {
     return []
   }
 
-  uploadingCount.value += imageFiles.length
-  try {
-    const urls = await Promise.all(imageFiles.map((file) => uploadSingleImage(file)))
-    const nodes = []
-    for (const [idx, file] of imageFiles.entries()) {
-      const url = urls[idx]
-      if (url) {
-        const node = imageNode.createAndFill({ alt: file.name, src: url })
-        if (node) {
-          nodes.push(node)
-        }
+  const urls = await Promise.all(imageFiles.map((file) => uploadSingleImage(file)))
+  const nodes = []
+  for (const [idx, file] of imageFiles.entries()) {
+    const url = urls[idx]
+    if (url) {
+      const node = imageNode.createAndFill({ alt: file.name, src: url })
+      if (node) {
+        nodes.push(node)
       }
     }
-    return nodes
-  } finally {
-    uploadingCount.value = Math.max(0, uploadingCount.value - imageFiles.length)
   }
+  return nodes
 }
 
 function createUploadPlaceholder(pos: number, spec: Parameters<typeof Decoration.widget>[2]) {
@@ -174,48 +156,13 @@ function applyExternalMarkdown(markdown: string): void {
   }
 }
 
-function runCmd(action: (ctx: Ctx) => unknown): void {
+function focusEditor(): void {
   if (!editorInstance || !editorReady) {
     return
   }
-  editorInstance.action(action)
-}
-
-function focusEditor(): void {
-  runCmd((ctx) => {
+  editorInstance.action((ctx) => {
     ctx.get(editorViewCtx).focus()
   })
-}
-
-function triggerImagePicker(): void {
-  fileInputRef.value?.click()
-}
-
-async function handleFileInputChange(event: Event): Promise<void> {
-  const input = event.target as HTMLInputElement
-  const rawFiles = input.files
-  input.value = ''
-  if (!rawFiles || !editorInstance || !editorReady) {
-    return
-  }
-  const files = collectImageFiles(rawFiles)
-  if (files.length === 0) {
-    return
-  }
-
-  uploadingCount.value += files.length
-  try {
-    const urls = await Promise.all(files.map((file) => uploadSingleImage(file)))
-    for (const [idx, file] of files.entries()) {
-      const url = urls[idx]
-      if (url) {
-        runCmd(callCommand(insertImageCommand.key, { alt: file.name, src: url }))
-      }
-    }
-    syncNow()
-  } finally {
-    uploadingCount.value = Math.max(0, uploadingCount.value - files.length)
-  }
 }
 
 function handleEditorKeydown(event: KeyboardEvent): void {
@@ -251,6 +198,7 @@ onMounted(async () => {
   const editor = Editor.make()
     .config((ctx) => configureEditor(ctx, root))
     .use(commonmark)
+    .use(resizableImageView)
     .use(gfm)
     .use(history)
     .use(clipboard)
@@ -287,190 +235,14 @@ defineExpose({
 
 <template>
   <div class="milkdown-shell" @keydown="handleEditorKeydown">
-    <div class="editor-toolbar" role="toolbar" aria-label="Markdown 格式工具栏">
-      <div class="toolbar-group">
-        <button
-          type="button"
-          class="tool-btn"
-          title="撤销 (Ctrl+Z)"
-          @mousedown.prevent
-          @click="runCmd(callCommand(undoCommand.key))"
-        >
-          撤销
-        </button>
-        <button
-          type="button"
-          class="tool-btn"
-          title="重做 (Ctrl+Y)"
-          @mousedown.prevent
-          @click="runCmd(callCommand(redoCommand.key))"
-        >
-          重做
-        </button>
-      </div>
-
-      <span class="toolbar-divider" aria-hidden="true" />
-
-      <div class="toolbar-group">
-        <button
-          type="button"
-          class="tool-btn"
-          title="一级标题"
-          @mousedown.prevent
-          @click="runCmd(callCommand(wrapInHeadingCommand.key, 1))"
-        >
-          H1
-        </button>
-        <button
-          type="button"
-          class="tool-btn"
-          title="二级标题"
-          @mousedown.prevent
-          @click="runCmd(callCommand(wrapInHeadingCommand.key, 2))"
-        >
-          H2
-        </button>
-        <button
-          type="button"
-          class="tool-btn"
-          title="三级标题"
-          @mousedown.prevent
-          @click="runCmd(callCommand(wrapInHeadingCommand.key, 3))"
-        >
-          H3
-        </button>
-      </div>
-
-      <span class="toolbar-divider" aria-hidden="true" />
-
-      <div class="toolbar-group">
-        <button
-          type="button"
-          class="tool-btn tool-bold"
-          title="加粗 (Ctrl+B)"
-          @mousedown.prevent
-          @click="runCmd(callCommand(toggleStrongCommand.key))"
-        >
-          B
-        </button>
-        <button
-          type="button"
-          class="tool-btn tool-italic"
-          title="斜体 (Ctrl+I)"
-          @mousedown.prevent
-          @click="runCmd(callCommand(toggleEmphasisCommand.key))"
-        >
-          I
-        </button>
-        <button
-          type="button"
-          class="tool-btn tool-strike"
-          title="删除线"
-          @mousedown.prevent
-          @click="runCmd(callCommand(toggleStrikethroughCommand.key))"
-        >
-          S
-        </button>
-        <button
-          type="button"
-          class="tool-btn tool-mono"
-          title="行内代码"
-          @mousedown.prevent
-          @click="runCmd(callCommand(toggleInlineCodeCommand.key))"
-        >
-          `代码`
-        </button>
-      </div>
-
-      <span class="toolbar-divider" aria-hidden="true" />
-
-      <div class="toolbar-group">
-        <button
-          type="button"
-          class="tool-btn"
-          title="无序列表"
-          @mousedown.prevent
-          @click="runCmd(callCommand(wrapInBulletListCommand.key))"
-        >
-          列表
-        </button>
-        <button
-          type="button"
-          class="tool-btn"
-          title="有序列表"
-          @mousedown.prevent
-          @click="runCmd(callCommand(wrapInOrderedListCommand.key))"
-        >
-          1. 列表
-        </button>
-        <button
-          type="button"
-          class="tool-btn"
-          title="引用块"
-          @mousedown.prevent
-          @click="runCmd(callCommand(wrapInBlockquoteCommand.key))"
-        >
-          引用
-        </button>
-        <button
-          type="button"
-          class="tool-btn"
-          title="代码块"
-          @mousedown.prevent
-          @click="runCmd(callCommand(createCodeBlockCommand.key))"
-        >
-          代码块
-        </button>
-        <button
-          type="button"
-          class="tool-btn"
-          title="插入表格"
-          @mousedown.prevent
-          @click="runCmd(callCommand(insertTableCommand.key, { row: 3, col: 3 }))"
-        >
-          表格
-        </button>
-        <button
-          type="button"
-          class="tool-btn"
-          title="分割线"
-          @mousedown.prevent
-          @click="runCmd(callCommand(insertHrCommand.key))"
-        >
-          分割线
-        </button>
-      </div>
-
-      <span class="toolbar-divider" aria-hidden="true" />
-
-      <div class="toolbar-group">
-        <button
-          type="button"
-          class="tool-btn tool-image"
-          :disabled="uploadingCount > 0"
-          title="插入或上传图片（也支持 Ctrl+V 粘贴截图 / 拖拽图片）"
-          @mousedown.prevent
-          @click="triggerImagePicker"
-        >
-          {{ uploadingCount > 0 ? '上传中...' : '插入图片' }}
-        </button>
-        <input
-          ref="fileInputRef"
-          type="file"
-          accept="image/*,.svg"
-          multiple
-          hidden
-          @change="handleFileInputChange"
-        />
-      </div>
-    </div>
-
     <div ref="editorRootRef" class="milkdown-host" @click.self="focusEditor" />
   </div>
 </template>
 
 <style scoped>
 .milkdown-shell {
+  flex: 1;
+  min-height: 0;
   display: flex;
   flex-direction: column;
   border: 1px solid var(--border-color);
@@ -479,85 +251,36 @@ defineExpose({
   overflow: hidden;
 }
 
-.editor-toolbar {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 0.35rem;
-  padding: 0.55rem 0.85rem;
-  background: var(--surface-subtle);
-  border-bottom: 1px solid var(--border-color);
-}
-
-.toolbar-group {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 0.25rem;
-}
-
-.toolbar-divider {
-  width: 1px;
-  height: 1.15rem;
-  background: var(--border-strong);
-  margin: 0 0.2rem;
-}
-
-.tool-btn {
-  border: 1px solid transparent;
-  background: transparent;
-  color: var(--text-regular);
-  border-radius: 6px;
-  padding: 0.26rem 0.52rem;
-  font-size: 0.8rem;
-  line-height: 1.25;
-  cursor: pointer;
-  transition: all 0.15s ease;
-}
-
-.tool-btn:hover:not(:disabled) {
-  background: var(--surface-muted);
-  color: var(--text-primary);
-}
-
-.tool-btn:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-}
-
-.tool-bold {
-  font-weight: 700;
-}
-
-.tool-italic {
-  font-style: italic;
-}
-
-.tool-strike {
-  text-decoration: line-through;
-}
-
-.tool-mono {
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-}
-
-.tool-image {
-  color: var(--primary-color);
-  font-weight: 500;
-}
-
 .milkdown-host {
-  min-height: 440px;
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
   cursor: text;
 }
 
+.milkdown-host :deep(.milkdown) {
+  flex: 1 0 auto;
+  display: flex;
+  flex-direction: column;
+}
+
 .milkdown-host :deep(.milkdown-prosemirror) {
-  min-height: 440px;
+  flex: 1 0 auto;
   padding: 1.35rem 1.5rem 2.5rem;
   outline: none;
   color: var(--text-regular);
-  font-size: 0.96rem;
-  line-height: 1.72;
+  font-family:
+    'LXGW WenKai GB',
+    'PingFang SC',
+    'Microsoft YaHei',
+    -apple-system,
+    BlinkMacSystemFont,
+    'Segoe UI',
+    sans-serif;
+  font-size: 1rem;
+  line-height: 1.78;
 }
 
 .milkdown-host :deep(.milkdown-prosemirror > :first-child) {
@@ -649,7 +372,7 @@ defineExpose({
 }
 
 .milkdown-host :deep(.milkdown-prosemirror code) {
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'LXGW WenKai GB', monospace;
   font-size: 0.88em;
   background: var(--surface-muted);
   color: var(--text-primary);
@@ -711,6 +434,106 @@ defineExpose({
 .milkdown-host :deep(.milkdown-prosemirror img.ProseMirror-selectednode) {
   outline: 2px solid var(--primary-color);
   outline-offset: 2px;
+}
+
+.milkdown-host :deep(.milkdown-prosemirror .milkdown-image-resizable) {
+  position: relative;
+  display: inline-block;
+  max-width: 100%;
+  margin: 0.75rem 0;
+  line-height: 0;
+  vertical-align: middle;
+}
+
+.milkdown-host :deep(.milkdown-prosemirror .milkdown-image-resizable .milkdown-image-el) {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  margin: 0;
+  border-radius: 8px;
+  border: 1px solid var(--border-color);
+}
+
+.milkdown-host
+  :deep(.milkdown-prosemirror .milkdown-image-resizable.is-selected .milkdown-image-el),
+.milkdown-host
+  :deep(
+    .milkdown-prosemirror .milkdown-image-resizable.ProseMirror-selectednode .milkdown-image-el
+  ),
+.milkdown-host
+  :deep(.milkdown-prosemirror .milkdown-image-resizable.is-resizing .milkdown-image-el) {
+  outline: 2px solid var(--primary-color);
+  outline-offset: 2px;
+}
+
+.milkdown-host :deep(.milkdown-prosemirror .milkdown-image-resize-handle) {
+  position: absolute;
+  z-index: 2;
+  opacity: 0;
+  touch-action: none;
+  transition:
+    opacity 0.15s ease,
+    background-color 0.15s ease,
+    transform 0.15s ease;
+}
+
+.milkdown-host
+  :deep(.milkdown-prosemirror .milkdown-image-resizable:hover .milkdown-image-resize-handle),
+.milkdown-host
+  :deep(.milkdown-prosemirror .milkdown-image-resizable.is-selected .milkdown-image-resize-handle),
+.milkdown-host
+  :deep(
+    .milkdown-prosemirror
+      .milkdown-image-resizable.ProseMirror-selectednode
+      .milkdown-image-resize-handle
+  ),
+.milkdown-host
+  :deep(.milkdown-prosemirror .milkdown-image-resizable.is-resizing .milkdown-image-resize-handle) {
+  opacity: 1;
+}
+
+.milkdown-host :deep(.milkdown-prosemirror .milkdown-image-resize-handle-right) {
+  top: 50%;
+  right: 6px;
+  width: 6px;
+  height: 36px;
+  max-height: 45%;
+  min-height: 16px;
+  transform: translateY(-50%);
+  border-radius: 999px;
+  background: rgba(15, 23, 42, 0.55);
+  border: 1.5px solid rgba(255, 255, 255, 0.85);
+  box-shadow: 0 1px 4px rgba(15, 23, 42, 0.25);
+  cursor: ew-resize;
+}
+
+.milkdown-host :deep(.milkdown-prosemirror .milkdown-image-resize-handle-right:hover),
+.milkdown-host
+  :deep(
+    .milkdown-prosemirror .milkdown-image-resizable.is-resizing .milkdown-image-resize-handle-right
+  ) {
+  background: var(--primary-color);
+}
+
+.milkdown-host :deep(.milkdown-prosemirror .milkdown-image-resize-handle-corner) {
+  right: -5px;
+  bottom: -5px;
+  width: 12px;
+  height: 12px;
+  border-radius: 3px;
+  background: var(--card-bg);
+  border: 2px solid var(--primary-color);
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.2);
+  cursor: nwse-resize;
+}
+
+.milkdown-host :deep(.milkdown-prosemirror .milkdown-image-resize-handle-corner:hover),
+.milkdown-host
+  :deep(
+    .milkdown-prosemirror .milkdown-image-resizable.is-resizing .milkdown-image-resize-handle-corner
+  ) {
+  background: var(--primary-color);
+  transform: scale(1.1);
 }
 
 .milkdown-host :deep(.milkdown-upload-placeholder) {

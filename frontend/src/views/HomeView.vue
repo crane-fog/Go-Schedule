@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import { onBeforeUnmount, onMounted, ref } from 'vue'
 import type { CreateScheduleRequest, Schedule, UpdateScheduleRequest } from '@/api'
 import NoteBoard from '@/components/NoteBoard.vue'
 import ScheduleCard from '@/components/ScheduleCard.vue'
@@ -24,23 +24,6 @@ const editingSchedule = ref<Schedule | undefined>(undefined)
 const sentinelRef = ref<HTMLElement | undefined>(undefined)
 const scheduleListRef = ref<HTMLElement | undefined>(undefined)
 const connectorGutterPx = ref(0)
-
-const noteSaveStatusLabel = computed(() => {
-  switch (noteStore.activeSaveStatus) {
-    case 'saving': {
-      return '保存中...'
-    }
-    case 'dirty': {
-      return '未保存 ●'
-    }
-    case 'saved': {
-      return '已保存'
-    }
-    default: {
-      return ''
-    }
-  }
-})
 
 useInfiniteScroll({
   canLoadMore: () => activeView.value === 'schedules' && store.hasMoreInfinite,
@@ -156,7 +139,7 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <main class="schedule-page">
+  <main class="schedule-page" :class="{ 'is-notes-view': activeView === 'notes' }">
     <!-- 顶部视图切换与操作栏 -->
     <header class="page-header">
       <div class="filter-tabs" role="tablist" aria-label="功能视图切换">
@@ -195,13 +178,6 @@ onBeforeUnmount(() => {
       </div>
 
       <div v-else class="header-actions">
-        <span
-          v-if="noteSaveStatusLabel"
-          class="save-status-pill"
-          :class="`status-${noteStore.activeSaveStatus}`"
-        >
-          {{ noteSaveStatusLabel }}
-        </span>
         <button
           type="button"
           class="btn btn-secondary"
@@ -209,14 +185,6 @@ onBeforeUnmount(() => {
           @click="handleRefreshNotes"
         >
           {{ noteStore.loading ? '刷新中...' : '刷新记事' }}
-        </button>
-        <button
-          type="button"
-          class="btn btn-secondary"
-          :disabled="!noteStore.activeNote || noteStore.activeSaveStatus === 'saving'"
-          @click="handleSaveActiveNote"
-        >
-          保存当前页签
         </button>
         <button
           type="button"
@@ -325,7 +293,15 @@ onBeforeUnmount(() => {
   gap: 1.35rem;
 }
 
+.schedule-page.is-notes-view {
+  height: 100vh;
+  height: 100dvh;
+  min-height: 420px;
+  padding-bottom: 1.5rem;
+}
+
 .page-header {
+  flex-shrink: 0;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -339,29 +315,6 @@ onBeforeUnmount(() => {
   justify-content: flex-end;
   flex-wrap: wrap;
   gap: 0.65rem;
-}
-
-.save-status-pill {
-  font-size: 0.82rem;
-  font-weight: 500;
-  padding: 0.25rem 0.6rem;
-  border-radius: 999px;
-  background: var(--surface-muted);
-  color: var(--text-secondary);
-}
-
-.save-status-pill.status-dirty {
-  color: var(--primary-color);
-  background: rgba(37, 99, 235, 0.12);
-}
-
-.save-status-pill.status-saving {
-  color: var(--text-primary);
-}
-
-.save-status-pill.status-saved {
-  color: var(--success-color);
-  background: rgba(16, 185, 129, 0.12);
 }
 
 .notice-banner {
