@@ -10,6 +10,7 @@ import (
 
 type Handlers struct {
 	ScheduleHandler *handler.ScheduleHandler
+	NoteHandler     *handler.NoteHandler
 }
 
 func NewRouter(h Handlers) *gin.Engine {
@@ -29,6 +30,7 @@ func NewRouter(h Handlers) *gin.Engine {
 		{
 			// protected.Use(middleware.AuthMiddleware())
 			h.ScheduleHandler.RegisterRoutes(protected)
+			h.NoteHandler.RegisterRoutes(protected)
 		}
 	}
 

@@ -10,6 +10,7 @@ import (
 type Config struct {
 	Addr   string `toml:"addr"`
 	DBPath string `toml:"db_path"`
+	ImagePath string `toml:"image_path"`
 }
 
 func Load(path string) (*Config, error) {
